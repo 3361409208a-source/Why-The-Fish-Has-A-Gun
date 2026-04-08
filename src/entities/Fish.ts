@@ -61,8 +61,8 @@ export class Fish extends PIXI.Sprite {
         this.orbitAngle = 0;
         this.rotation = 0;
         
-        // 速度降低 70% (原速度约 1~3, 现在 0.3~0.9)
-        this.originalSpeed = (Math.random() * 2 + 1) * 0.3;
+        // 速度提升 100% (为了匹配增强后的火力)
+        this.originalSpeed = (Math.random() * 2 + 1) * 0.6;
         this.speed = this.originalSpeed;
 
         // 根据精英/BOSS 身份调整属性
