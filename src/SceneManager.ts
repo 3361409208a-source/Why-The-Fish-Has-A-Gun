@@ -22,6 +22,7 @@ export class SceneManager {
 
     public static setBackground(sprite: PIXI.TilingSprite): void {
         this.bgSprite = sprite;
+        this.applyResize(); // 立即执行一次适配，防止初始加载时背景没对齐
     }
 
     public static init(app: PIXI.Application): void {
