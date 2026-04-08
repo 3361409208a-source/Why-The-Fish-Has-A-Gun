@@ -1,36 +1,34 @@
 import * as PIXI from 'pixi.js';
+import { AssetManager } from '../AssetManager';
 
-export class Particle extends PIXI.Graphics {
+export class Particle extends PIXI.Sprite {
     public isActive: boolean = false;
     private vx: number = 0;
     private vy: number = 0;
     private life: number = 0;
 
     constructor() {
-        super();
-        this.beginFill(0x00f0ff);
-        this.drawCircle(0, 0, 2);
-        this.endFill();
+        // 使用烘培好的白色圆点纹理，以兼容 ParticleContainer
+        super(AssetManager.textures['white_dot']);
+        this.anchor.set(0.5);
     }
 
-    public spawn(x: number, y: number): void {
+    public spawn(x: number, y: number, color: number = 0x00f0ff, size: number = 4): void {
         this.x = x;
         this.y = y;
+        this.tint = color;
+        
+        // 纹理原始大小是 8x8 (radius 4)
+        this.scale.set(size / 8);
+        
+        const angle = Math.random() * Math.PI * 2;
+        const force = Math.random() * 5 + 2;
+        this.vx = Math.cos(angle) * force;
+        this.vy = Math.sin(angle) * force;
+        this.life = 1.0;
+        this.alpha = 1;
         this.isActive = true;
         this.visible = true;
-        this.alpha = 1;
-        
-        const speed = Math.random() * 5 + 2;
-        const angle = Math.random() * Math.PI * 2;
-        this.vx = Math.cos(angle) * speed;
-        this.vy = Math.sin(angle) * speed;
-        this.life = 1.0;
-        
-        // 随机颜色 (机械电火花感)
-        this.clear();
-        this.beginFill(Math.random() > 0.5 ? 0x00f0ff : 0xffffff);
-        this.drawRect(0, 0, 3, 3);
-        this.endFill();
     }
 
     public update(delta: number): void {

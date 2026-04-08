@@ -3,6 +3,8 @@ import { AssetManager } from '../AssetManager';
 
 export class Bullet extends PIXI.Sprite {
     public isActive: boolean = false;
+    public damage: number = 1;
+    public level: number = 1;
     private speed: number = 10;
     private vx: number = 0;
     private vy: number = 0;
@@ -13,12 +15,36 @@ export class Bullet extends PIXI.Sprite {
         this.anchor.set(0.5);
     }
 
-    public setType(type: string): void {
-        this.texture = AssetManager.textures[type === 'plasma' ? 'bullet_plasma' : 'bullet_laser'];
-        this.speed = type === 'plasma' ? 15 : 12; // 等离子体更快
+    public setType(type: string, level: number = 1): void {
+        this.level = level;
         
-        // 增加发光滤镜 (可选，如果性能允许)
-        // this.filters = [new PIXI.filters.GlowFilter({ distance: 10, outerStrength: 2, color: type === 'plasma' ? 0xff00ff : 0x00ffff })];
+        // 映射纹理
+        const texMap: {[key: string]: string} = {
+            'cannon_base': 'bullet_laser',
+            'fish_tuna_mode': 'bullet_plasma',
+            'gatling': 'bullet_gatling',
+            'heavy': 'bullet_heavy',
+            'lightning': 'bullet_lightning'
+        };
+        
+        this.texture = AssetManager.textures[texMap[type] || 'bullet_laser'];
+        
+        // 基础数值
+        let baseSpeed = 12;
+        let baseDmg = 1;
+        
+        switch(type) {
+            case 'fish_tuna_mode': baseSpeed = 10; baseDmg = 1.5; break;
+            case 'gatling': baseSpeed = 18; baseDmg = 0.6; break;
+            case 'heavy': baseSpeed = 8; baseDmg = 12; break;
+            case 'lightning': baseSpeed = 25; baseDmg = 3; break;
+        }
+
+        // 等级加成：每级增加 50% 伤害，20% 速度，15% 尺寸
+        const bonus = (level - 1);
+        this.speed = baseSpeed * (1 + bonus * 0.2);
+        this.damage = baseDmg * (1 + bonus * 0.4);
+        this.scale.set(1 + bonus * 0.15);
     }
 
     public fire(x: number, y: number, angle: number): void {
