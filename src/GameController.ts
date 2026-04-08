@@ -151,7 +151,8 @@ export class GameController {
         SceneManager.update(delta);
 
         this.spawnTimer += delta;
-        if (this.spawnTimer > 30) {
+        // 增加鱼群数量 3 倍 (生成间隔从 30 帧降低到 10 帧)
+        if (this.spawnTimer > 10) {
             this.spawnFish();
             this.spawnTimer = 0;
         }
