@@ -171,7 +171,8 @@ export class GameController {
     private handleAutoFire(delta: number): void {
         const id = this.unlockedWeapons[this.currentWeaponIndex];
         this.autoFireTimer += delta;
-        let interval = (id === 'gatling') ? 4 : (id === 'heavy' ? 35 : 12);
+        // 降低射击间隔，提升全武器射速 (约为原来的 2 倍速)
+        let interval = (id === 'gatling') ? 2 : (id === 'heavy' ? 18 : 6);
         
         if (this.autoFireTimer > interval) {
             const angle = this.cannon.getFireAngle();
@@ -259,11 +260,14 @@ export class GameController {
         if (fish.takeDamage(dmg) && fish.hp <= 0) {
             fish.kill();
             const roll = Math.random();
-            const val = (fish as any).isBoss ? 500 : (roll > 0.8 ? 50 : 10);
+            // 晶体奖励翻倍 (100% 提升)
+            const val = ((fish as any).isBoss ? 500 : (roll > 0.8 ? 50 : 10)) * 2;
             this.crystals += val;
             this.updateShopUI();
             this.spawnParticles(fish.x, fish.y, 10, 0xffffff, 5);
-            if (roll < 0.3) this.dropCore(fish.x, fish.y, roll < 0.05);
+            
+            // 晶体掉落概率增加 (从 0.3 提升至 0.6)
+            if (roll < 0.6) this.dropCore(fish.x, fish.y, roll < 0.1);
             UIManager.showFloatingText(fish.x, fish.y, `+${val}`, 0x00ff00);
         }
     }

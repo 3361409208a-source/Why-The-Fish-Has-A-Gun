@@ -43,7 +43,8 @@ export class Bullet extends PIXI.Sprite {
         // 等级加成：每级增加 50% 伤害，20% 速度，15% 尺寸
         const bonus = (level - 1);
         this.speed = baseSpeed * (1 + bonus * 0.2);
-        this.damage = baseDmg * (1 + bonus * 0.4);
+        // 整体伤害增加 100% (即伤害 x2)
+        this.damage = baseDmg * (1 + bonus * 0.4) * 2;
         this.scale.set(1 + bonus * 0.15);
     }
 
