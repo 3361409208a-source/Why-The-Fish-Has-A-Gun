@@ -9,6 +9,7 @@ import { Cannon } from './entities/Cannon';
 
 import { Particle } from './entities/Particle';
 import { Shockwave } from './entities/Shockwave';
+import { Lightning } from './entities/Lightning';
 
 export class GameController {
     private app: PIXI.Application;
@@ -36,6 +37,7 @@ export class GameController {
     private cores: NanoCore[] = [];
     private particles: Particle[] = [];
     private shockwaves: Shockwave[] = [];
+    private lightnings: Lightning[] = [];
     private frozenTime: number = 0;
 
     private spawnTimer: number = 0;
@@ -161,6 +163,7 @@ export class GameController {
         this.updateEntities(this.cores, 'core', delta);
         this.updateEntities(this.particles, 'particle', delta);
         this.updateEntities(this.shockwaves, 'shockwave', delta);
+        this.updateEntities(this.lightnings, 'lightning', delta);
 
         this.checkCollisions();
     }
@@ -286,20 +289,18 @@ export class GameController {
     }
 
     private drawLightningArc(x1: number, y1: number, x2: number, y2: number): void {
-        const g = new PIXI.Graphics();
-        SceneManager.getLayer(Layers.Game).addChild(g);
-        g.lineStyle(2, 0x00ffff, 1);
-        g.moveTo(x1, y1);
-        for (let i=1; i<=4; i++) {
-            g.lineTo(x1+(x2-x1)*i/4+(Math.random()-0.5)*20, y1+(y2-y1)*i/4+(Math.random()-0.5)*20);
+        const arc = this.pool.get('lightning', () => new Lightning());
+        if (arc) {
+            arc.spawn(x1, y1, x2, y2);
+            SceneManager.getLayer(Layers.Game).addChild(arc);
+            this.lightnings.push(arc);
         }
-        g.lineTo(x2, y2);
-        let a = 1;
-        const t = (delta: number) => { a -= 0.1*delta; g.alpha=a; if(a<=0){ g.destroy(); PIXI.Ticker.shared.remove(t); } };
-        PIXI.Ticker.shared.add(t);
     }
 
     private spawnParticles(x: number, y: number, count: number, color: number, size: number): void {
+        // 手机端粒子上限保护 (防止过度渲染导致卡顿)
+        if (this.particles.length > 300) return; 
+
         for (let i=0; i<count; i++) {
             const p = this.pool.get('particle', () => new Particle());
             if (p) { p.spawn(x, y, color, size); SceneManager.getLayer(Layers.FX).addChild(p); this.particles.push(p); }
