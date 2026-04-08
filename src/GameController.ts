@@ -329,7 +329,14 @@ export class GameController {
         for (let i = list.length - 1; i >= 0; i--) {
             const e = list[i];
             if (e.update) e.update(delta);
-            if (!e.isActive) { this.pool.put(type, e); list.splice(i, 1); }
+            
+            if (!e.isActive) {
+                // 关键点：从场景层中移除，防止对象池中的“残留”影子停留
+                if (e.parent) e.parent.removeChild(e);
+                
+                this.pool.put(type, e);
+                list.splice(i, 1);
+            }
         }
     }
 }

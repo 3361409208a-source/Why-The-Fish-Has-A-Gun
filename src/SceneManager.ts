@@ -68,18 +68,39 @@ export class SceneManager {
         const vw = window.innerWidth;
         const vh = window.innerHeight;
         
-        const scale = Math.min(vw / this.width, vh / this.height);
+        let targetVW = vw;
+        let targetVH = vh;
+        let rotation = 0;
+
+        // 手机竖屏检测与自动横屏旋转 (Mobile Auto-Landscape)
+        if (vw < vh) {
+            rotation = Math.PI / 2;
+            targetVW = vh;
+            targetVH = vw;
+        }
+
+        const scale = Math.min(targetVW / this.width, targetVH / this.height);
         
         this.app.stage.scale.set(scale);
-        this.app.stage.x = (vw - this.width * scale) / 2;
-        this.app.stage.y = (vh - this.height * scale) / 2;
+        this.app.stage.rotation = rotation;
 
-        // 平铺背景全屏适配
+        if (rotation === 0) {
+            // 正常横屏布局
+            this.app.stage.x = (vw - this.width * scale) / 2;
+            this.app.stage.y = (vh - this.height * scale) / 2;
+        } else {
+            // 手机竖屏时的旋转布局 (将横屏旋转 90 度塞进竖屏)
+            // 旋转中心在 (vw, 0)，X轴指向下方，Y轴指向左方
+            this.app.stage.x = vw - (vw - this.height * scale) / 2;
+            this.app.stage.y = (vh - this.width * scale) / 2;
+        }
+
+        // 平铺背景全屏适配 (适配旋转后的坐标系)
         if (this.bgSprite) {
-            this.bgSprite.width = vw / scale;
-            this.bgSprite.height = vh / scale;
-            this.bgSprite.x = -this.app.stage.x / scale;
-            this.bgSprite.y = -this.app.stage.y / scale;
+            this.bgSprite.width = targetVW / scale;
+            this.bgSprite.height = targetVH / scale;
+            this.bgSprite.x = 0;
+            this.bgSprite.y = 0;
         }
     }
 
