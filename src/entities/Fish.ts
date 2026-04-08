@@ -31,7 +31,8 @@ export class Fish extends PIXI.Sprite {
                 uniform sampler2D uSampler;
                 void main(void) {
                     vec4 color = texture2D(uSampler, vTextureCoord);
-                    if (color.r > 0.9 && color.g > 0.9 && color.b > 0.9) {
+                    // 提高阈值到 0.98，防止鱼身上的高光部分被误删（解决图片显示不全/空洞问题）
+                    if (color.r > 0.98 && color.g > 0.98 && color.b > 0.98) {
                         discard;
                     }
                     gl_FragColor = color;

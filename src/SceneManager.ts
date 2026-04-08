@@ -68,6 +68,9 @@ export class SceneManager {
         const vw = window.innerWidth;
         const vh = window.innerHeight;
         
+        // 关键：必须动态调整渲染器分辨率，否则画面会缩在左上角
+        this.app.renderer.resize(vw, vh);
+
         let targetVW = vw;
         let targetVH = vh;
         let rotation = 0;
@@ -95,12 +98,20 @@ export class SceneManager {
             this.app.stage.y = (vh - this.width * scale) / 2;
         }
 
-        // 平铺背景全屏适配 (适配旋转后的坐标系)
+        // 平铺背景全屏适配 (适配旋转后的坐标系，确保覆盖物理全屏)
         if (this.bgSprite) {
             this.bgSprite.width = targetVW / scale;
             this.bgSprite.height = targetVH / scale;
-            this.bgSprite.x = 0;
-            this.bgSprite.y = 0;
+            
+            if (rotation === 0) {
+                this.bgSprite.x = -this.app.stage.x / scale;
+                this.bgSprite.y = -this.app.stage.y / scale;
+            } else {
+                // 旋转模式下的坐标对齐：逻辑 (0,0) 在屏幕 (vw, 0)
+                // 我们需要背景反向偏移以覆盖屏幕左侧和上方
+                this.bgSprite.x = -this.app.stage.y / scale;
+                this.bgSprite.y = (this.app.stage.x - vw) / scale;
+            }
         }
     }
 
