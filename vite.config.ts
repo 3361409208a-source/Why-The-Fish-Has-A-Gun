@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => {
         formats: ['iife'],
         fileName: () => 'game.bundle.js',
       } : undefined,
-      outDir: isWechat ? 'dist' : 'dist_h5',
+      outDir: isWechat ? 'dist_wechat' : 'dist',
       emptyOutDir: true,
       rollupOptions: isWechat ? {
         output: {
