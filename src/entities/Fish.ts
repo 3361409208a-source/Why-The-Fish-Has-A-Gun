@@ -2,91 +2,110 @@ import * as PIXI from 'pixi.js';
 import { AssetManager } from '../AssetManager';
 
 export class Fish extends PIXI.Sprite {
-    public hp: number = 2;
-    public maxHp: number = 2;
+    public hp: number = 10;
+    public maxHp: number = 10;
     public speed: number = 2;
-    public originalSpeed: number = 2;
     public isActive: boolean = false;
-    private baseY: number = 0;
-    private baseScaleY: number = 1;
+    private side: 'left' | 'right' = 'left';
     private swayTimer: number = 0;
-    private side: 'left' | 'right' = 'right';
-    private isBoss: boolean = false;
+    private hitTimer: number = 0;
+    private dashTimer: number = 0;
+    private originalSpeed: number = 2;
+    private behavior: 'swim' | 'dash' | 'orbit' = 'swim';
+    private orbitAngle: number = 0;
+    private baseScaleY: number = 1;
+
+    public isBoss: boolean = false;
 
     private static _sharedFilter: PIXI.Filter;
 
     constructor() {
-        super(AssetManager.textures['fish_tuna']);
+        super();
         this.anchor.set(0.5);
         
-        // 缩放到标准尺寸
-        const targetWidth = 100;
-        const scale = targetWidth / this.texture.width;
-        this.scale.set(scale);
-
-        // 利用 Pixi v7 的共享 Filter 机制优化性能
         if (!Fish._sharedFilter) {
-            const shaderFrag = `
+            Fish._sharedFilter = new PIXI.Filter(undefined, `
                 varying vec2 vTextureCoord;
                 uniform sampler2D uSampler;
-                void main(void) {
+                uniform float uHitEffect;
+                uniform float uIsBoss;
+
+                void main() {
                     vec4 color = texture2D(uSampler, vTextureCoord);
-                    // 提高阈值到 0.98，防止鱼身上的高光部分被误删（解决图片显示不全/空洞问题）
-                    if (color.r > 0.98 && color.g > 0.98 && color.b > 0.98) {
-                        discard;
+                    // Luminance-based Discard (抠掉深色背景)
+                    float luma = dot(color.rgb, vec3(0.299, 0.587, 0.114));
+                    if(luma < 0.1) discard; 
+                    
+                    // BOSS 红色发光滤镜
+                    if(uIsBoss > 0.5) {
+                        color.rgb += vec3(0.5, 0.0, 0.0) * (1.0 - color.a);
+                        color.r = mix(color.r, 1.0, 0.3);
                     }
+
+                    // 受击白光
+                    color.rgb = mix(color.rgb, vec4(1.0).rgb, uHitEffect);
                     gl_FragColor = color;
                 }
-            `;
-            Fish._sharedFilter = new PIXI.Filter(undefined, shaderFrag);
+            `, {
+                uHitEffect: 0,
+                uIsBoss: 0
+            });
         }
         this.filters = [Fish._sharedFilter];
     }
 
-    private hitTimer: number = 0;
-    private behavior: 'swim' | 'circle' | 'exit' = 'swim';
-    private orbitAngle: number = 0;
-    private dashTimer: number = 0;
-
-    public spawn(x: number, y: number, side: 'left' | 'right' = 'right', isBoss: boolean = false): void {
+    public spawn(x: number, y: number, side: 'left' | 'right', isBoss: boolean = false): void {
         this.x = x;
         this.y = y;
-        this.baseY = y;
         this.side = side;
-        this.isBoss = isBoss;
         this.swayTimer = Math.random() * Math.PI * 2;
         this.hitTimer = 0;
         this.dashTimer = 0;
         this.behavior = 'swim';
         this.orbitAngle = 0;
         this.rotation = 0;
+        this.isBoss = isBoss;
         
-        // 速度提升 100% (为了匹配增强后的火力)
-        this.originalSpeed = (Math.random() * 2 + 1) * 0.6;
-        this.speed = this.originalSpeed;
+        // 注入地图难度倍率 (从 GameController 动态注入)
+        const mapMult = (window as any).DmgMultCurrent || 1.0;
 
-        // 根据精英/BOSS 身份调整属性
+        // 基础速度
+        this.originalSpeed = (Math.random() * 2 + 1) * 0.6;
+
         if (isBoss) {
-            this.hp = 50;
-            this.scale.set(4.0 * (100 / this.texture.width));
+            this.texture = AssetManager.textures['fish_shark'] || AssetManager.textures['fish_tuna'];
+            this.hp = 100 * 40; // 这里的 40 是 BOSS 倍率
+            this.scale.set(5.0 * (150 / this.texture.width));
         } else {
-            // 随机体型与血量
-            const typeRand = Math.random();
-            if (typeRand < 0.2) {
-                this.hp = 8;
-                this.scale.set(1.8 * (100 / this.texture.width));
-            } else if (typeRand < 0.5) {
-                this.hp = 3;
-                this.scale.set(1.1 * (100 / this.texture.width));
+            const speciesRand = Math.random();
+            if (speciesRand < 0.3) {
+                this.texture = AssetManager.textures['fish_angler']; 
+                this.hp = 2;
+                this.originalSpeed *= 1.8;
+                this.scale.set(0.6 * (100 / this.texture.width));
+            } else if (speciesRand < 0.6) {
+                this.texture = AssetManager.textures['fish_jelly'];
+                this.hp = 5;
+                this.originalSpeed *= 0.8;
+                this.scale.set(1.0 * (100 / this.texture.width));
+            } else if (speciesRand < 0.85) {
+                this.texture = AssetManager.textures['fish_tuna'];
+                this.hp = 10;
+                this.scale.set(1.4 * (100 / this.texture.width));
             } else {
-                this.hp = 1;
-                this.scale.set(0.7 * (100 / this.texture.width));
+                this.texture = AssetManager.textures['fish_shark'];
+                this.hp = 30;
+                this.originalSpeed *= 0.6;
+                this.scale.set(2.2 * (100 / this.texture.width));
             }
         }
+
+        // 应用地图难度倍率
+        this.hp *= mapMult;
         this.maxHp = this.hp;
+        this.speed = this.originalSpeed;
         this.baseScaleY = Math.abs(this.scale.y);
 
-        // 镜像翻转
         if (this.side === 'left') {
             this.scale.x = -Math.abs(this.scale.x);
         } else {
@@ -97,104 +116,57 @@ export class Fish extends PIXI.Sprite {
         this.visible = true;
     }
 
-    public get hitRadius(): number {
-        // 基于缩放比例计算受击半径，基础宽度100，所以基础半径50
-        return 50 * Math.abs(this.scale.x / (100 / (this.texture.width || 100)));
-    }
-
-
     public update(delta: number): void {
         if (!this.isActive) return;
 
-        // 1. 逃窜逻辑 (Panic Dash)
-        if (this.dashTimer > 0) {
+        // AI 行为逻辑
+        this.swayTimer += delta * 0.05;
+        const sway = Math.sin(this.swayTimer) * 2;
+
+        if (this.behavior === 'swim') {
+            this.x += (this.side === 'left' ? 1 : -1) * this.speed * delta;
+            this.y += sway * 0.5;
+            
+            if (Math.random() < 0.005) {
+                this.behavior = 'dash';
+                this.dashTimer = 30;
+            }
+        } else if (this.behavior === 'dash') {
+            this.x += (this.side === 'left' ? 3 : -3) * this.speed * delta;
             this.dashTimer -= delta;
-            this.speed = this.originalSpeed * 4; // 猛的一窜
-            // 移除导致背景显现的 tint 逻辑
-        } else {
-            this.speed = this.originalSpeed;
+            if (this.dashTimer <= 0) this.behavior = 'swim';
         }
 
-        // 2. 挣扎动画逻辑 (叠加在基础速度上)
-        let moveSpeed = this.speed;
+        // 呼吸感缩放
+        this.scale.y = this.baseScaleY + Math.sin(this.swayTimer) * 0.05;
+
+        // 受击闪烁恢复
         if (this.hitTimer > 0) {
             this.hitTimer -= delta;
-            this.x += (Math.random() - 0.5) * 12;
-            this.y += (Math.random() - 0.5) * 12;
-            const pulse = 1 + Math.sin(this.hitTimer * 0.8) * 0.2;
-            this.scale.y = this.baseScaleY * pulse;
-            
-            // 修复：减速比由 0.1 提高到 0.5，防止完全卡住
-            moveSpeed *= 0.5; 
-            
-            if (this.hitTimer <= 0) this.scale.y = this.baseScaleY;
-        }
-
-        // 3. AI 路径逻辑 (游动 -> 绕圈 -> 离开)
-        const dir = this.side === 'right' ? -1 : 1;
-        const screenEdgeStart = this.side === 'right' ? 300 : 980;
-        
-        switch (this.behavior) {
-            case 'swim':
-                this.x += dir * moveSpeed * delta;
-                // 到达对侧边缘开始绕圈
-                if ((this.side === 'right' && this.x < 300) || (this.side === 'left' && this.x > 980)) {
-                    this.behavior = 'circle';
-                    this.orbitAngle = 0;
-                }
-                break;
-                
-            case 'circle':
-                this.orbitAngle += 0.05 * delta;
-                const radius = 80;
-                // 绕圈位移
-                this.x += Math.cos(this.orbitAngle) * radius * 0.1 * delta;
-                this.y += Math.sin(this.orbitAngle) * radius * 0.1 * delta;
-                
-                // 自动调整朝向 (绕圈时头朝前)
-                this.rotation = this.orbitAngle + (this.side === 'right' ? Math.PI : 0);
-                
-                if (this.orbitAngle >= Math.PI * 2) {
-                    this.behavior = 'exit';
-                    this.rotation = 0;
-                }
-                break;
-                
-            case 'exit':
-                this.x += dir * moveSpeed * delta;
-                break;
-        }
-
-        // 摆动动画 (非绕圈状态下)
-        if (this.behavior !== 'circle') {
-            this.swayTimer += delta * 0.05;
-            this.y = this.baseY + Math.sin(this.swayTimer) * 15;
-            // 逃窜时不倾斜，表现冲刺感
-            if (this.dashTimer <= 0) {
-                this.rotation = Math.sin(this.swayTimer * 0.8) * 0.1;
+            if (this.hitTimer <= 0) {
+                this.filters = [Fish._sharedFilter];
+                Fish._sharedFilter.uniforms.uHitEffect = 0;
             }
         }
 
-        // 边界处理
-        if (this.x < -400 || this.x > 1280 + 400) {
+        // 边界检查
+        if (this.x < -300 || this.x > 1580 || this.y < -300 || this.y > 1020) {
             this.kill();
         }
     }
 
     public takeDamage(dmg: number): boolean {
         this.hp -= dmg;
-        this.hitTimer = 15;
+        this.hitTimer = 5;
+        Fish._sharedFilter.uniforms.uHitEffect = 0.8;
+        Fish._sharedFilter.uniforms.uIsBoss = this.isBoss ? 1.0 : 0.0;
         
-        // 逃窜几率：血量上限越高越聪明
-        if (this.maxHp >= 3 && Math.random() < 0.3) {
-            this.dashTimer = 40; // 逃窜 40 帧
+        if (this.hp <= 0) {
+            this.kill();
+            return true;
         }
-        
-        if (this.hp <= 0) return true; 
         return false;
     }
-
-
 
     public kill(): void {
         this.isActive = false;

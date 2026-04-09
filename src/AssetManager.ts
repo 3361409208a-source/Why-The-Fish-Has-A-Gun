@@ -60,13 +60,34 @@ export class AssetManager {
             // 动态路径适配：微信小游戏使用相对路径，H5 必须使用绝对路径(/)才能映射到 public 目录
             const getPath = (p: string) => (window as any).wx ? p : `/${p}`;
 
-            const bgTex = await loadImage(getPath('assets/bg.png')).catch(() => null);
-            const tunaTex = await loadImage(getPath('assets/jqy.png')).catch(() => null);
-            const baseTex = await loadImage(getPath('assets/jgwuqi.png')).catch(() => null);
+            // 加载全新 V3 资产
+            const bgTex = await loadImage(getPath('assets/bg_v2.png')).catch(() => null);
+            const cannonTex = await loadImage(getPath('assets/cannon_v3.png')).catch(() => null);
+            const bulletTex = await loadImage(getPath('assets/bullet_v2.png')).catch(() => null);
+            
+            // 多难度地图加载
+            const mapNormal = await loadImage(getPath('assets/map_normal.png')).catch(() => null);
+            const mapHard = await loadImage(getPath('assets/map_hard.png')).catch(() => null);
+            const mapLunatic = await loadImage(getPath('assets/map_lunatic.png')).catch(() => null);
+
+            // 鱼群多样化加载
+            const tunaTex = await loadImage(getPath('assets/fish_v2.png')).catch(() => null);
+            const anglerTex = await loadImage(getPath('assets/fish_angler.png')).catch(() => null);
+            const sharkTex = await loadImage(getPath('assets/fish_shark.png')).catch(() => null);
+            const jellyTex = await loadImage(getPath('assets/fish_jelly.png')).catch(() => null);
 
             if (bgTex) this.textures['bg_ocean'] = bgTex;
+            if (mapNormal) this.textures['map_normal'] = mapNormal;
+            if (mapHard) this.textures['map_hard'] = mapHard;
+            if (mapLunatic) this.textures['map_lunatic'] = mapLunatic;
+            
+            if (cannonTex) this.textures['cannon_v3'] = cannonTex;
+            if (bulletTex) this.textures['bullet_v2'] = bulletTex;
+            
             if (tunaTex) this.textures['fish_tuna'] = tunaTex;
-            if (baseTex) this.textures['cannon_base'] = baseTex;
+            if (anglerTex) this.textures['fish_angler'] = anglerTex;
+            if (sharkTex) this.textures['fish_shark'] = sharkTex;
+            if (jellyTex) this.textures['fish_jelly'] = jellyTex;
 
             // 补充兜底逻辑 (如果文件缺失)
             if (!this.textures['bg_ocean']) {
@@ -77,9 +98,13 @@ export class AssetManager {
                 const g = new PIXI.Graphics().beginFill(0xff0000).drawCircle(0, 0, 20);
                 this.textures['fish_tuna'] = renderer.generateTexture(g);
             }
-            if (!this.textures['cannon_base']) {
-                const g = new PIXI.Graphics().beginFill(0x888888).drawRect(0, 0, 30, 30);
-                this.textures['cannon_base'] = renderer.generateTexture(g);
+            if (!this.textures['cannon_v2']) {
+                const g = new PIXI.Graphics().beginFill(0x888888).drawRect(0, 0, 100, 100);
+                this.textures['cannon_v2'] = renderer.generateTexture(g);
+            }
+            if (!this.textures['bullet_v2']) {
+                const g = new PIXI.Graphics().beginFill(0x00ffff).drawCircle(10, 10, 10);
+                this.textures['bullet_v2'] = renderer.generateTexture(g);
             }
 
             // 6. 粒子基准纹理 (用于 ParticleContainer 渲染)
@@ -93,19 +118,28 @@ export class AssetManager {
         } catch (e) {
             console.error('Asset loading/generation error:', e);
             
-            // 降级处理：如果图片加载失败，创建占位符以防止崩溃
-            if (!this.textures['bg_ocean']) {
-                const g = new PIXI.Graphics();
-                g.beginFill(0x000033);
-                g.drawRect(0, 0, 64, 64);
-                this.textures['bg_ocean'] = renderer.generateTexture(g);
-            }
-            if (!this.textures['fish_tuna']) {
-                const g = new PIXI.Graphics();
-                g.beginFill(0xff0000);
-                g.drawCircle(0, 0, 20);
-                this.textures['fish_tuna'] = renderer.generateTexture(g);
-            }
+            // 针对带底色的生成图增加 Shader 剔除逻辑
+            const discardShader = `
+                varying vec2 vTextureCoord;
+                uniform sampler2D uSampler;
+                uniform float uIsBoss;
+                void main(void) {
+                    vec4 color = texture2D(uSampler, vTextureCoord);
+                    
+                    // 剔除深度背景 (基于亮度, 低于 0.15 亮度的视为背景)
+                    float luma = dot(color.rgb, vec3(0.299, 0.587, 0.114));
+                    if (luma < 0.15) discard;
+                    
+                    // 如果是 Boss，将色相调红
+                    if (uIsBoss > 0.5) {
+                        float avg = (color.r + color.g + color.b) / 3.0;
+                        color.rgb = vec3(avg * 1.5, avg * 0.2, avg * 0.2);
+                    }
+                    
+                    gl_FragColor = color;
+                }
+            `;
+            (window as any).Fish._sharedFilter = new PIXI.Filter(undefined, discardShader, { uIsBoss: 0.0 });
         }
     }
 }

@@ -3,10 +3,10 @@ import { AssetManager } from '../AssetManager';
 
 export class Cannon extends PIXI.Sprite {
     constructor() {
-        super(AssetManager.textures['cannon_base']);
+        super(AssetManager.textures['cannon_v3']);
         this.eventMode = 'static';
-        // 关键修复：初始默认使用激光武器图 jgwuqi.png
-        this.switchTexture('cannon_base');
+        // 升级至正顶视角 V3
+        this.switchTexture('cannon_v3');
     }
 
 
@@ -16,10 +16,11 @@ export class Cannon extends PIXI.Sprite {
             uniform sampler2D uSampler;
             void main(void) {
                 vec4 color = texture2D(uSampler, vTextureCoord);
-                float brightness = max(max(color.r, color.g), color.b);
-                if (brightness > 0.98) {
-                    discard;
-                }
+                
+                // 剔除底色 (由于生成的炮台底色比较深，我们剔除亮度低于 0.12 的像素)
+                float luma = dot(color.rgb, vec3(0.299, 0.587, 0.114));
+                if (luma < 0.12) discard;
+                
                 gl_FragColor = color;
             }
         `;
@@ -28,27 +29,18 @@ export class Cannon extends PIXI.Sprite {
 
 
     public switchTexture(key: string): void {
-        this.texture = AssetManager.textures[key] || AssetManager.textures['cannon_base'];
+        this.texture = AssetManager.textures['cannon_v3'] || AssetManager.textures['cannon_base'];
         
-        // 针对“竖版”激光武器图进行姿态校准
-        if (key === 'cannon_base' || key === 'gatling' || key === 'heavy' || key === 'lightning') {
-            const targetWidth = 80;
-            const originalWidth = this.texture.width || 500;
-            const s = targetWidth / originalWidth;
-            
-            this.scale.set(Math.min(s, 1.0));
-            // 默认竖向头朝上，0 弧度即指向 12 点方向
-            this.rotation = 0; 
-            // 轴心设在底部中央
-            this.anchor.set(0.5, 0.9); 
-            this.applyChromaKey();
-        } else {
-            // 鱼模组等横版素材的特殊处理 (如果未来还有)
-            this.anchor.set(0.5, 0.5); 
-            this.scale.set(0.4); 
-            this.rotation = -Math.PI / 2;
-            this.filters = [];
-        }
+        // V3 炮台采用正顶视角，旋转表现更稳定
+        const targetWidth = 160; 
+        const originalWidth = this.texture.width || 1024;
+        const s = targetWidth / originalWidth;
+        
+        this.scale.set(s);
+        this.rotation = 0; 
+        // V3 生成图的重心位于偏下的位置
+        this.anchor.set(0.5, 0.7); 
+        this.applyChromaKey();
     }
 
 

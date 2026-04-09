@@ -53,12 +53,18 @@ const initGame = async () => {
     SceneManager.init(app);
     UIManager.init(app);
 
-    // 3. 启动核心控制器
-    const bg = new PIXI.TilingSprite(AssetManager.textures['bg_ocean'], window.innerWidth, window.innerHeight);
-    SceneManager.getLayer(Layers.Background).addChild(bg);
-    SceneManager.setBackground(bg);
-    
-    new GameController(app);
+    // 3. 进入选图界面，选完后再启动控制器
+    UIManager.showMapSelection((config) => {
+        // 设置所选地图背景
+        const bgTex = AssetManager.textures[config.tex] || AssetManager.textures['bg_ocean'];
+        const bg = new PIXI.TilingSprite(bgTex, window.innerWidth, window.innerHeight);
+        SceneManager.getLayer(Layers.Background).removeChildren();
+        SceneManager.getLayer(Layers.Background).addChild(bg);
+        SceneManager.setBackground(bg);
+        
+        // 传入选图配置启动战斗系统
+        new GameController(app, config);
+    });
 
     console.log('Game Started');
 };

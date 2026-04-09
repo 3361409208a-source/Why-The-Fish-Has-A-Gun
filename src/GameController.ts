@@ -6,6 +6,7 @@ import { Bullet } from './entities/Bullet';
 import { NanoCore } from './entities/NanoCore';
 import { UIManager } from './UIManager';
 import { Cannon } from './entities/Cannon';
+import { AssetManager } from './AssetManager';
 
 import { Particle } from './entities/Particle';
 import { Shockwave } from './entities/Shockwave';
@@ -42,6 +43,11 @@ export class GameController {
 
     private spawnTimer: number = 0;
 
+    // 难度数值
+    private hpMultiplier: number = 1.0;
+    private spawnRate: number = 1.0;
+    private rewardMultiplier: number = 1.0;
+
     // 武器库定义
     private weaponCatalog = [
         { id: 'cannon_base', name: '标准激光', cost: 0 },
@@ -51,9 +57,13 @@ export class GameController {
         { id: 'lightning', name: '连锁闪电', cost: 15000 }
     ];
 
-    constructor(app: PIXI.Application) {
+    constructor(app: PIXI.Application, config: any) {
         this.app = app;
         this.pool = PoolManager.getInstance();
+        
+        this.hpMultiplier = config.hpMult || 1.0;
+        this.spawnRate = config.spawnRate || 1.0;
+        this.rewardMultiplier = config.reward || 1.0;
         
         this.initCannon();
         this.initInteraction();
@@ -86,7 +96,6 @@ export class GameController {
 
         let isDragging = false;
 
-        // 兼容原有的 PC/H5 Pixi 事件方案
         this.app.stage.on('pointerdown', (e) => {
             isDragging = true;
             onMove(e);
@@ -102,14 +111,12 @@ export class GameController {
             }
         });
 
-        // 终极武器：如果是微信原生环境，强行接管底层的 Touch 事件，无视 Pixi 的事件过滤系统
         if (typeof (window as any).wx !== 'undefined' && typeof (window as any).wx.onTouchMove === 'function') {
             const wx = (window as any).wx;
             wx.onTouchStart((res: any) => {
                 isDragging = true;
                 if (res.touches && res.touches.length > 0) {
                     const touch = res.touches[0];
-                    // 屏幕逻辑像素坐标转换至 Pixi 舞台坐标
                     const localPos = this.app.stage.toLocal(new PIXI.Point(touch.clientX, touch.clientY));
                     this.cannon.lookAt(localPos.x, localPos.y);
                 }
@@ -191,9 +198,8 @@ export class GameController {
 
         SceneManager.update(delta);
 
-        this.spawnTimer += delta;
-        // 增加鱼群数量 3 倍 (生成间隔从 30 帧降低到 10 帧)
-        if (this.spawnTimer > 10) {
+        this.spawnTimer += delta * this.spawnRate;
+        if (this.spawnTimer > 15) {
             this.spawnFish();
             this.spawnTimer = 0;
         }
@@ -213,7 +219,6 @@ export class GameController {
     private handleAutoFire(delta: number): void {
         const id = this.unlockedWeapons[this.currentWeaponIndex];
         this.autoFireTimer += delta;
-        // 降低射击间隔，提升全武器射速 (约为原来的 2 倍速)
         let interval = (id === 'gatling') ? 2 : (id === 'heavy' ? 18 : 6);
         
         if (this.autoFireTimer > interval) {
@@ -279,110 +284,137 @@ export class GameController {
         switch(id) {
             case 'gatling':
                 this.spawnParticles(x, y, 4, 0xffff00, 3);
-                SceneManager.shake(1, 30);
                 break;
             case 'heavy':
-                this.spawnParticles(x, y, 15, 0xff6600, 8);
-                this.spawnShockwave(x, y, 1.2 + lvl*0.2);
-                SceneManager.shake(4 + lvl, 100);
+                this.spawnParticles(x, y, 15, 0xffaa00, 5);
+                this.spawnShockwave(x, y, 1.0 + lvl*0.2);
+                SceneManager.shake(10, 150);
                 break;
             case 'lightning':
                 this.spawnParticles(x, y, 5, 0x00ffff, 4);
                 break;
-            case 'fish_tuna_mode':
-                this.spawnParticles(x, y, 6, 0x00ff00, 5);
-                break;
             default:
-                this.spawnParticles(x, y, 3, 0x00f8ff, 4);
+                this.spawnParticles(x, y, 3, 0xcccccc, 1);
         }
     }
 
-    private applyDamage(fish: Fish, dmg: number): void {
-        if (!fish.isActive) return;
-        if (fish.takeDamage(dmg) && fish.hp <= 0) {
-            fish.kill();
-            const roll = Math.random();
-            // 晶体奖励翻倍 (100% 提升)
-            const val = ((fish as any).isBoss ? 500 : (roll > 0.8 ? 50 : 10)) * 2;
-            this.crystals += val;
-            this.updateShopUI();
-            this.spawnParticles(fish.x, fish.y, 10, 0xffffff, 5);
-            
-            // 晶体掉落概率增加 (从 0.3 提升至 0.6)
-            if (roll < 0.6) this.dropCore(fish.x, fish.y, roll < 0.1);
-            UIManager.showFloatingText(fish.x, fish.y, `+${val}`, 0x00ff00);
-        }
-    }
+    private triggerChainLightning(startFish: Fish, maxCount: number, dmg: number): void {
+        let current = startFish;
+        let count = 0;
+        const hitSet = new Set<Fish>([startFish]);
 
-    private triggerChainLightning(start: Fish, jumps: number, dmg: number): void {
-        let curr = start;
-        let seen = new Set([start]);
-        for (let j=0; j<jumps; j++) {
+        while(count < maxCount) {
             let next: Fish | null = null;
-            let dMin = 300;
-            for (const f of this.fishes) {
-                if (!f.isActive || seen.has(f)) continue;
-                const d = Math.sqrt(Math.pow(f.x-curr.x,2)+Math.pow(f.y-curr.y,2));
-                if (d < dMin) { dMin = d; next = f; }
+            let minDist = 300;
+
+            for(const f of this.fishes) {
+                if(!f.isActive || hitSet.has(f)) continue;
+                const d = Math.sqrt(Math.pow(f.x-current.x,2)+Math.pow(f.y-current.y,2));
+                if(d < minDist) {
+                    minDist = d;
+                    next = f;
+                }
             }
-            if (next) {
-                this.drawLightningArc(curr.x, curr.y, next.x, next.y);
+
+            if(next) {
+                this.spawnLightning(current.x, current.y, next.x, next.y);
                 this.applyDamage(next, dmg);
-                seen.add(next);
-                curr = next;
+                hitSet.add(next);
+                current = next;
+                count++;
             } else break;
         }
     }
 
-    private drawLightningArc(x1: number, y1: number, x2: number, y2: number): void {
-        const arc = this.pool.get('lightning', () => new Lightning());
-        if (arc) {
-            arc.spawn(x1, y1, x2, y2);
-            SceneManager.getLayer(Layers.Game).addChild(arc);
-            this.lightnings.push(arc);
+    private applyDamage(fish: Fish, dmg: number): void {
+        const isDead = fish.takeDamage(dmg);
+        if (isDead) {
+            const roll = Math.random();
+            const val = ((fish as any).isBoss ? 500 : (roll > 0.8 ? 50 : 10)) * 2 * this.rewardMultiplier;
+            this.crystals += val;
+            UIManager.updateHUD(this.crystals);
+            
+            this.spawnParticles(fish.x, fish.y, 20, 0xffffff, 8);
+            this.spawnParticles(fish.x, fish.y, 10, 0x00f0ff, 12);
+
+            if (Math.random() < 0.15) this.spawnNanoCore(fish.x, fish.y);
         }
     }
 
-    private spawnParticles(x: number, y: number, count: number, color: number, size: number): void {
-        // 手机端粒子上限保护 (防止过度渲染导致卡顿)
-        if (this.particles.length > 300) return; 
+    private spawnFish(): void {
+        const side = Math.random() > 0.5 ? 'left' : 'right';
+        const x = side === 'left' ? -200 : SceneManager.width + 200;
+        const y = 100 + Math.random() * (SceneManager.height - 300);
+        
+        const isBoss = Math.random() < 0.03;
+        const fish = this.pool.get('fish', () => new Fish());
+        if (fish) {
+            // 将难度乘数注入 window 以便 Fish 实体访问，避开构造函数爆炸
+            (window as any).DmgMultCurrent = this.hpMultiplier;
+            fish.spawn(x, y, side, isBoss);
+            SceneManager.getLayer(Layers.Game).addChild(fish);
+            this.fishes.push(fish);
+        }
+    }
 
-        for (let i=0; i<count; i++) {
+    private spawnNanoCore(x: number, y: number): void {
+        const core = this.pool.get('core', () => new NanoCore());
+        if (core) {
+            core.spawn(x, y);
+            SceneManager.getLayer(Layers.Game).addChild(core);
+            this.cores.push(core);
+        }
+    }
+
+    private spawnParticles(x: number, y: number, count: number, color: number, intensity: number): void {
+        for(let i=0; i<count; i++) {
             const p = this.pool.get('particle', () => new Particle());
-            if (p) { p.spawn(x, y, color, size); SceneManager.getLayer(Layers.FX).addChild(p); this.particles.push(p); }
+            if(p) {
+                p.spawn(x, y, color, intensity);
+                SceneManager.getLayer(Layers.FX).addChild(p);
+                this.particles.push(p);
+            }
         }
     }
 
     private spawnShockwave(x: number, y: number, scale: number): void {
         const s = this.pool.get('shockwave', () => new Shockwave());
-        if (s) { s.spawn(x, y, scale); SceneManager.getLayer(Layers.Game).addChild(s); this.shockwaves.push(s); }
+        if(s) {
+            s.spawn(x, y, scale);
+            SceneManager.getLayer(Layers.FX).addChild(s);
+            this.shockwaves.push(s);
+        }
     }
 
-    private spawnFish(): void {
-        const f = this.pool.get('fish', () => new Fish());
-        if (!f) return;
-        const side = Math.random() > 0.5 ? 'left' : 'right';
-        f.spawn(side === 'right' ? 1330 : -50, Math.random()*600+50, side, Math.random()<0.05);
-        SceneManager.getLayer(Layers.Game).addChild(f);
-        this.fishes.push(f);
-    }
-
-    private dropCore(x: number, y: number, gold: boolean): void {
-        const c = this.pool.get('core', () => new NanoCore());
-        if (c) { c.spawn(x, y, gold); SceneManager.getLayer(Layers.Game).addChild(c); this.cores.push(c); }
+    private spawnLightning(x1: number, y1: number, x2: number, y2: number): void {
+        const l = this.pool.get('lightning', () => new Lightning());
+        if(l) {
+            l.spawn(x1, y1, x2, y2);
+            SceneManager.getLayer(Layers.FX).addChild(l);
+            this.lightnings.push(l);
+        }
     }
 
     private updateEntities(list: any[], type: string, delta: number): void {
         for (let i = list.length - 1; i >= 0; i--) {
-            const e = list[i];
-            if (e.update) e.update(delta);
+            const entity = list[i];
+            entity.update(delta);
             
-            if (!e.isActive) {
-                // 关键点：从场景层中移除，防止对象池中的“残留”影子停留
-                if (e.parent) e.parent.removeChild(e);
-                
-                this.pool.put(type, e);
+            if (type === 'core' && entity.isActive) {
+                const dx = entity.x - this.cannon.x;
+                const dy = entity.y - this.cannon.y;
+                if (Math.sqrt(dx*dx + dy*dy) < 80) {
+                    this.crystals += 500;
+                    UIManager.updateHUD(this.crystals);
+                    this.spawnParticles(entity.x, entity.y, 30, 0x00ffbb, 15);
+                    entity.kill();
+                    UIManager.showFloatingText(entity.x, entity.y, "+500 核心奖励", 0x00ffbb);
+                }
+            }
+
+            if (!entity.isActive) {
                 list.splice(i, 1);
+                this.pool.release(type, entity);
             }
         }
     }

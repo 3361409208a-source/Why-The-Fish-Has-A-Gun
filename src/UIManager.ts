@@ -1,5 +1,6 @@
 import * as PIXI from 'pixi.js';
 import { SceneManager, Layers } from './SceneManager';
+import { AssetManager } from './AssetManager';
 
 /**
  * 纯 Pixi 实现的 UI 系统
@@ -10,10 +11,14 @@ export class UIManager {
     public static Crystals: number = 0;
     private static shopContainer: PIXI.Container;
     private static weaponButtons: Map<string, PIXI.Container> = new Map();
+    private static menuContainer: PIXI.Container;
 
     public static init(app: PIXI.Application): void {
         this.app = app;
         const uiLayer = SceneManager.getLayer(Layers.UI);
+        
+        this.menuContainer = new PIXI.Container();
+        uiLayer.addChild(this.menuContainer);
 
         // 晶体显示 (货币)
         this.scoreText = new PIXI.Text('晶体: 0', {
@@ -25,9 +30,78 @@ export class UIManager {
         });
         this.scoreText.x = 20;
         this.scoreText.y = 20;
+        this.scoreText.visible = false; // 初始隐藏，选完图再显示
         uiLayer.addChild(this.scoreText);
 
         this.initShop();
+    }
+
+    /**
+     * 显示地图选择主界面
+     */
+    public static showMapSelection(onSelected: (config: any) => void): void {
+        this.menuContainer.removeChildren();
+        this.shopContainer.visible = false;
+        
+        const maps = [
+            { id: 'normal', name: '孢子温床', difficulty: '普通', tex: 'map_normal', hpMult: 1.0, spawnRate: 1.0, reward: 1.0 },
+            { id: 'hard', name: '放射死区', difficulty: '困难', tex: 'map_hard', hpMult: 8.0, spawnRate: 2.0, reward: 5.0 },
+            { id: 'lunatic', name: '余烬核心', difficulty: '疯狂', tex: 'map_lunatic', hpMult: 30.0, spawnRate: 4.0, reward: 25.0 }
+        ];
+
+        const title = new PIXI.Text("选择变异海域", { fontSize: 48, fill: 0x00f0ff, fontWeight: 'bold' });
+        title.anchor.set(0.5);
+        title.x = SceneManager.width / 2;
+        title.y = 80;
+        this.menuContainer.addChild(title);
+
+        maps.forEach((m, i) => {
+            const card = new PIXI.Container();
+            card.x = 180 + i * 320;
+            card.y = 150;
+
+            const bg = new PIXI.Graphics();
+            bg.beginFill(0x222222);
+            bg.lineStyle(4, i===0?0x00ff00:(i===1?0xffcc00:0xff0000));
+            bg.drawRoundedRect(0, 0, 280, 420, 15);
+            bg.endFill();
+
+            // 缩略图
+            const thumb = new PIXI.Sprite(AssetManager.textures[m.tex] || AssetManager.textures['bg_ocean']);
+            thumb.width = 260; thumb.height = 200;
+            thumb.x = 10; thumb.y = 10;
+            const mask = new PIXI.Graphics().beginFill(0xffffff).drawRoundedRect(10, 10, 260, 200, 10).endFill();
+            thumb.mask = mask;
+
+            const name = new PIXI.Text(m.name, { fontSize: 28, fill: 0xffffff, fontWeight: 'bold' });
+            name.anchor.set(0.5);
+            name.x = 140; name.y = 240;
+
+            const diff = new PIXI.Text(`难度: ${m.difficulty}`, { fontSize: 20, fill: i===0?0x00ff00:(i===1?0xffcc00:0xff0000) });
+            diff.anchor.set(0.5);
+            diff.x = 140; diff.y = 280;
+
+            const info = new PIXI.Text(`血量: x${m.hpMult}\n密度: x${m.spawnRate}\n奖励: x${m.reward}`, { fontSize: 16, fill: 0xaaaaaa, align: 'center' });
+            info.anchor.set(0.5);
+            info.x = 140; info.y = 330;
+
+            const btn = new PIXI.Graphics().beginFill(0x0088ff).drawRoundedRect(40, 370, 200, 40, 8).endFill();
+            const btnTxt = new PIXI.Text("开始猎杀", { fontSize: 20, fill: 0xffffff });
+            btnTxt.anchor.set(0.5);
+            btnTxt.x = 140; btnTxt.y = 390;
+
+            card.addChild(bg, thumb, mask, name, diff, info, btn, btnTxt);
+            card.eventMode = 'static';
+            card.cursor = 'pointer';
+            card.on('pointerdown', () => {
+                this.menuContainer.removeChildren();
+                this.scoreText.visible = true;
+                this.shopContainer.visible = true;
+                onSelected(m);
+            });
+
+            this.menuContainer.addChild(card);
+        });
     }
 
     private static initShop(): void {
