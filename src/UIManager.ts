@@ -8,15 +8,19 @@ export class UIManager {
     private static app: PIXI.Application;
     public static Crystals: number = 0;
     private static shopContainer: PIXI.Container;
-    private static menuContainer: PIXI.Container;
-    private static talentContainer: PIXI.Container;
     private static mallContainer: PIXI.Container;
+    private static weaponryContainer: PIXI.Container;
+    private static menuContainer: PIXI.Container; // 主界面容器
+    private static mainPageContainer: PIXI.Container; // 用于切换主页面内容的容器
+    private static navContainer: PIXI.Container; // 底部导航栏容器
+    private static currentOnMapSelected: (config: any) => void;
 
     private static comboContainer: PIXI.Container;
     private static comboText: PIXI.Text;
     private static comboValue: number = 0;
     private static comboLabel: PIXI.Text; // 将 label 提升为静态属性以便动画
     private static HUDLayer: PIXI.Container;
+    private static activeTab: string = 'lobby';
     
     // 格式化数字：10000 -> 1万, 100000000 -> 1亿
     public static formatNumber(num: number): string {
@@ -28,8 +32,18 @@ export class UIManager {
     public static init(app: PIXI.Application): void {
         this.app = app;
         const uiLayer = SceneManager.getLayer(Layers.UI);
+        
+        // 主界面容器
         this.menuContainer = new PIXI.Container();
         uiLayer.addChild(this.menuContainer);
+
+        // 页面内容承载容器
+        this.mainPageContainer = new PIXI.Container();
+        this.menuContainer.addChild(this.mainPageContainer);
+
+        // 底部导航栏
+        this.navContainer = new PIXI.Container();
+        this.menuContainer.addChild(this.navContainer);
 
         this.scoreText = new PIXI.Text('晶体: 0', {
             fontFamily: 'Verdana', fontSize: 28, fill: 0xffffff, stroke: '#000000', strokeThickness: 4
@@ -137,41 +151,244 @@ export class UIManager {
     }
 
     public static showMapSelection(onSelected: (config: any) => void): void {
-        this.menuContainer.removeChildren();
+        this.currentOnMapSelected = onSelected;
+        this.menuContainer.visible = true;
         this.shopContainer.visible = false;
+        this.switchPage('lobby');
+    }
+
+    private static switchPage(pageId: string): void {
+        this.activeTab = pageId;
+        this.mainPageContainer.removeChildren();
+        this.navContainer.removeChildren();
+        
+        // 1. 绘制顶部状态栏（各页面共用）
+        this.drawHeader();
+
+        // 2. 绘制具体页面内容
+        switch(pageId) {
+            case 'lobby': this.drawLobbyPage(); break;
+            case 'weaponry': this.drawWeaponryPage(); break;
+            case 'research': this.drawResearchPage(); break;
+            case 'mall': this.drawMallPage(); break;
+        }
+
+        // 3. 绘制底部导航
+        this.drawNavigationBar();
+    }
+
+    private static drawHeader(): void {
         const goldValue = this.formatNumber(SaveManager.state.gold);
         const goldText = new PIXI.Text(`金币: ${goldValue}`, { 
             fontSize: 32, fill: 0xffcc00, fontWeight: 'bold', stroke: '#000', strokeThickness: 4 
         });
         goldText.x = 40; goldText.y = 40;
-        this.menuContainer.addChild(goldText);
+        this.mainPageContainer.addChild(goldText);
+
         const title = new PIXI.Text("这鱼不对劲", { fontSize: 56, fill: 0x00f0ff, fontWeight: 'bold' });
         title.anchor.set(0.5); title.x = SceneManager.width / 2; title.y = 70;
-        this.menuContainer.addChild(title);
+        this.mainPageContainer.addChild(title);
+    }
+
+    private static drawNavigationBar(): void {
+        const tabs = [
+            { id: 'lobby', name: '海域挑战' },
+            { id: 'weaponry', name: '武器装备' },
+            { id: 'research', name: '升级中心' },
+            { id: 'mall', name: '英雄商城' }
+        ];
+        
+        const navBg = new PIXI.Graphics().beginFill(0x050e1a, 0.9).drawRect(0, SceneManager.height - 100, SceneManager.width, 100).endFill();
+        this.navContainer.addChild(navBg);
+
+        const tabWidth = SceneManager.width / tabs.length;
+        tabs.forEach((tab, i) => {
+            const isActive = this.activeTab === tab.id;
+            const tabBtn = new PIXI.Container();
+            tabBtn.x = i * tabWidth; tabBtn.y = SceneManager.height - 100;
+            
+            const bg = new PIXI.Graphics()
+                .beginFill(isActive ? 0x00f0ff : 0x111822, isActive ? 0.2 : 0)
+                .drawRect(0, 0, tabWidth, 100)
+                .endFill();
+            
+            if (isActive) {
+                const marker = new PIXI.Graphics().beginFill(0x00f0ff).drawRect(20, 0, tabWidth - 40, 4).endFill();
+                tabBtn.addChild(marker);
+            }
+
+            const txt = new PIXI.Text(tab.name, { 
+                fontSize: 24, fill: isActive ? 0x00f0ff : 0x888888, fontWeight: 'bold' 
+            });
+            txt.anchor.set(0.5); txt.x = tabWidth / 2; txt.y = 50;
+            
+            tabBtn.addChild(bg, txt);
+            tabBtn.eventMode = 'static'; tabBtn.cursor = 'pointer';
+            tabBtn.on('pointerdown', () => this.switchPage(tab.id));
+            this.navContainer.addChild(tabBtn);
+        });
+    }
+
+    private static drawLobbyPage(): void {
         const maps = [
             { id: 'normal', name: '孢子温床', difficulty: '普通', tex: 'map_normal', hpMult: 1.0, spawnRate: 1.0, reward: 1.0 },
             { id: 'hard', name: '放射死区', difficulty: '困难', tex: 'map_hard', hpMult: 8.0, spawnRate: 2.0, reward: 5.0 },
             { id: 'lunatic', name: '余烬核心', difficulty: '疯狂', tex: 'map_lunatic', hpMult: 30.0, spawnRate: 4.0, reward: 25.0 }
         ];
-        maps.forEach((m, i) => {
-            const card = this.createMapCard(m, i, onSelected);
-            this.menuContainer.addChild(card);
-        });
-        this.talentContainer = new PIXI.Container();
-        this.talentContainer.x = SceneManager.width - 340; this.talentContainer.y = 150;
-        this.menuContainer.addChild(this.talentContainer);
         
-        this.mallContainer = new PIXI.Container();
-        this.mallContainer.x = SceneManager.width - 660; this.mallContainer.y = 150;
-        this.menuContainer.addChild(this.mallContainer);
+        const mapContainer = new PIXI.Container();
+        mapContainer.x = (SceneManager.width - (maps.length * 280 - 20)) / 2;
+        mapContainer.y = 180;
+        this.mainPageContainer.addChild(mapContainer);
 
-        this.drawTalents(goldText);
-        this.drawMall(goldText);
+        maps.forEach((m, i) => {
+            const card = this.createMapCard(m, i, this.currentOnMapSelected);
+            card.x = i * 280; card.y = 0;
+            mapContainer.addChild(card);
+        });
+    }
+
+    private static drawWeaponryPage(): void {
+        const title = new PIXI.Text("— 武器库档案馆 —", { fontSize: 28, fill: 0xffcc00, fontWeight: 'bold' });
+        title.anchor.set(0.5); title.x = SceneManager.width / 2; title.y = 160;
+        this.mainPageContainer.addChild(title);
+
+        const weapons = [
+            { id: 'cannon_base', name: '标准激光', desc: '联盟制式武器，均衡的射速与威力。' },
+            { id: 'fish_tuna_mode', name: '机械鱼模组', desc: '发射仿生机械金枪鱼，造成多次穿透。' },
+            { id: 'gatling', name: '等离子加特林', desc: '极致的射速压制，让深海异种寸步难行。' },
+            { id: 'heavy', name: '重爆核能炮', desc: '毁灭性的范围爆破，核心区域伤害翻倍。' },
+            { id: 'lightning', name: '连锁闪电', desc: '电弧跃迁打击，对群体目标效果拔群。' }
+        ];
+
+        const listContainer = new PIXI.Container();
+        listContainer.x = 100; listContainer.y = 220;
+        this.mainPageContainer.addChild(listContainer);
+
+        weapons.forEach((w, i) => {
+            const item = new PIXI.Graphics().beginFill(0x111822, 0.8).lineStyle(2, 0x444444).drawRoundedRect(0, i * 85, SceneManager.width - 200, 75, 10).endFill();
+            const lvl = SaveManager.state.weaponLevels[w.id] || 1;
+            const name = new PIXI.Text(`${w.name} (LV.${lvl})`, { fontSize: 20, fill: 0x00f0ff, fontWeight: 'bold' });
+            name.x = 20; name.y = i * 85 + 15;
+            const desc = new PIXI.Text(w.desc, { fontSize: 16, fill: 0xaaaaaa });
+            desc.x = 20; desc.y = i * 85 + 42;
+            listContainer.addChild(item, name, desc);
+        });
+    }
+
+    private static drawResearchPage(): void {
+        const container = new PIXI.Container();
+        container.x = (SceneManager.width - 700) / 2; container.y = 150;
+        this.mainPageContainer.addChild(container);
+        
+        const bg = new PIXI.Graphics().beginFill(0x111822, 0.95).lineStyle(2, 0x00f0ff).drawRoundedRect(0, 0, 700, 650, 15).endFill();
+        const title = new PIXI.Text("升级与研究中心", { fontSize: 32, fill: 0x00f0ff, fontWeight: 'bold' });
+        title.anchor.set(0.5); title.x = 350; title.y = 40;
+        container.addChild(bg, title);
+
+        const leftCol = new PIXI.Container(); leftCol.x = 30; leftCol.y = 80;
+        const rightCol = new PIXI.Container(); rightCol.x = 370; rightCol.y = 80;
+        container.addChild(leftCol, rightCol);
+
+        const talents: (keyof typeof SaveManager.state.talents)[] = ['damage', 'fireRate', 'goldBonus', 'critChance'];
+        const names = { damage: '基础火力', fireRate: '射击频率', goldBonus: '收益加成', critChance: '暴击终端' };
+        talents.forEach((key, index) => {
+            const row = new PIXI.Container(); row.y = index * 130;
+            const lvl = SaveManager.state.talents[key]; const cost = SaveManager.getUpgradeCost(key);
+            const canAfford = SaveManager.state.gold >= cost;
+            const rbg = new PIXI.Graphics().beginFill(0x1a212e).drawRoundedRect(0, 0, 310, 110, 8).endFill();
+            const label = new PIXI.Text(`${names[key]}`, { fontSize: 20, fill: 0xffffff, fontWeight: 'bold' }); label.x = 15; label.y = 15;
+            const level = new PIXI.Text(`等级: ${lvl}`, { fontSize: 16, fill: 0x00f0ff }); level.x = 15; level.y = 45;
+            const btn = new PIXI.Graphics().beginFill(canAfford ? 0x0088ff : 0x333333).drawRoundedRect(15, 70, 280, 30, 5).endFill();
+            const btnTxt = new PIXI.Text(`升级 (${this.formatNumber(cost)} G)`, { fontSize: 16, fill: 0xffffff });
+            btnTxt.anchor.set(0.5); btnTxt.x = 155; btnTxt.y = 85;
+            row.addChild(rbg, label, level, btn, btnTxt);
+            row.eventMode = 'static'; row.cursor = canAfford ? 'pointer' : 'default';
+            row.on('pointerdown', () => {
+                if (SaveManager.state.gold >= cost) {
+                    SaveManager.state.gold -= cost; (SaveManager.state.talents[key] as number)++; SaveManager.save();
+                    this.switchPage('research'); // 刷新整页
+                    this.showFloatingText(SceneManager.width/2, SceneManager.height/2, "研究完成!", 0x00ff00);
+                }
+            });
+            leftCol.addChild(row);
+        });
+
+        const wps = [
+            { id: 'cannon_base', name: '标准激光' }, { id: 'fish_tuna_mode', name: '机械鱼' },
+            { id: 'gatling', name: '加特林' }, { id: 'heavy', name: '重爆炮' }, { id: 'lightning', name: '连锁闪电' }
+        ];
+        wps.forEach((w, index) => {
+            const row = new PIXI.Container(); row.y = index * 105;
+            const lvl = SaveManager.state.weaponLevels[w.id] || 1;
+            const cost = Math.floor(1000 * Math.pow(2, lvl - 1));
+            const isMax = lvl >= 5; const canAfford = !isMax && SaveManager.state.gold >= cost;
+            const rbg = new PIXI.Graphics().beginFill(0x1a212e).drawRoundedRect(0, 0, 310, 90, 8).endFill();
+            const label = new PIXI.Text(w.name, { fontSize: 18, fill: 0xffffff }); label.x = 15; label.y = 15;
+            const level = new PIXI.Text(`LV.${lvl}`, { fontSize: 16, fill: 0xffcc00 }); level.x = 15; level.y = 40;
+            const btn = new PIXI.Graphics().beginFill(isMax?0x222222:(canAfford?0xaa6600:0x333333)).drawRoundedRect(160, 20, 130, 50, 5).endFill();
+            const btnTxt = new PIXI.Text(isMax?'MAX':`${this.formatNumber(cost)}G`, { fontSize: 16, fill: 0xffffff });
+            btnTxt.anchor.set(0.5); btnTxt.x = 225; btnTxt.y = 45;
+            row.addChild(rbg, label, level, btn, btnTxt);
+            if(!isMax) { row.eventMode='static'; row.cursor='pointer'; row.on('pointerdown', () => {
+                if(SaveManager.state.gold >= cost){
+                    SaveManager.state.gold -= cost; SaveManager.state.weaponLevels[w.id] = lvl+1; SaveManager.save();
+                    this.switchPage('research'); // 刷新整页
+                    this.showFloatingText(SceneManager.width/2, SceneManager.height/2, "属性提升!", 0xffcc00);
+                }
+            });}
+            rightCol.addChild(row);
+        });
+    }
+
+    private static drawMallPage(): void {
+        const container = new PIXI.Container();
+        container.x = (SceneManager.width - 960) / 2; container.y = 150;
+        this.mainPageContainer.addChild(container);
+
+        const bg = new PIXI.Graphics().beginFill(0x111822, 0.95).lineStyle(2, 0xff00ff).drawRoundedRect(0, 0, 960, 650, 15).endFill();
+        const mainTitle = new PIXI.Text("英雄机甲商城", { fontSize: 32, fill: 0xff00ff, fontWeight: 'bold' });
+        mainTitle.anchor.set(0.5); mainTitle.x = 480; mainTitle.y = 40;
+        container.addChild(bg, mainTitle);
+
+        const mallWeapons = [
+            { id: 'railgun', name: '热能轨道炮', cost: 50000, tex: 'skin_railgun', desc: '毁灭性双轨打击，具备极高的贯穿伤害。' },
+            { id: 'void', name: '虚空投影仪', cost: 150000, tex: 'skin_void', desc: '制造微型黑洞，吸引范围内的所有异种。' },
+            { id: 'acid', name: '生化孢子炮', cost: 300000, tex: 'skin_acid', desc: '覆盖生化酸液，造成大面积持续腐蚀。' }
+        ];
+
+        mallWeapons.forEach((w, index) => {
+            const card = new PIXI.Container(); card.x = 20 + index * 310; card.y = 100;
+            const cbg = new PIXI.Graphics().beginFill(0x1a212e).lineStyle(1, 0x3a4a5e).drawRoundedRect(0, 0, 300, 500, 12).endFill();
+            const isUnlocked = SaveManager.state.goldUnlockedWeapons.includes(w.id);
+            const icon = new PIXI.Sprite(AssetManager.textures[w.tex]);
+            icon.width = 180; icon.height = 180; icon.anchor.set(0.5); icon.x = 150; icon.y = 120;
+            const name = new PIXI.Text(w.name, { fontSize: 24, fill: 0xffffff, fontWeight: 'bold' });
+            name.anchor.set(0.5); name.x = 150; name.y = 230;
+            const desc = new PIXI.Text(w.desc, { fontSize: 16, fill: 0xaaaaaa, wordWrap: true, wordWrapWidth: 260, align: 'center' });
+            desc.anchor.set(0.5); desc.x = 150; desc.y = 310;
+            const canAfford = SaveManager.state.gold >= w.cost;
+            const buyBtn = new PIXI.Graphics().beginFill(isUnlocked?0x004488:(canAfford?0x880088:0x333333)).drawRoundedRect(30, 420, 240, 50, 10).endFill();
+            const buyTxt = new PIXI.Text(isUnlocked?"已入库":`解锁: ${this.formatNumber(w.cost)} G`, { fontSize: 18, fill: 0xffffff });
+            buyTxt.anchor.set(0.5); buyTxt.x = 150; buyTxt.y = 445;
+            card.addChild(cbg, icon, name, desc, buyBtn, buyTxt);
+            if(!isUnlocked){
+                card.eventMode = 'static'; card.cursor = canAfford ? 'pointer' : 'default';
+                card.on('pointerdown', () => {
+                    if (SaveManager.state.gold >= w.cost) {
+                        SaveManager.state.gold -= w.cost; SaveManager.state.goldUnlockedWeapons.push(w.id);
+                        SaveManager.state.weaponLevels[w.id] = 1; SaveManager.save();
+                        this.switchPage('mall'); // 刷新整页
+                        this.showFloatingText(SceneManager.width/2, SceneManager.height/2, `获得神兵: ${w.name}`, 0xff00ff);
+                    }
+                });
+            }
+            container.addChild(card);
+        });
     }
 
     private static createMapCard(m: any, i: number, onSelected: (config: any) => void): PIXI.Container {
         const card = new PIXI.Container();
-        card.x = 100 + i * 260; card.y = 150;
         const bg = new PIXI.Graphics().beginFill(0x111111, 0.85).lineStyle(3, i===0?0x00ff00:(i===1?0xffcc00:0xff0000)).drawRoundedRect(0, 0, 240, 380, 15).endFill();
         const thumb = new PIXI.Sprite(AssetManager.textures[m.tex] || AssetManager.textures['bg_ocean']);
         thumb.width = 220; thumb.height = 150; thumb.x = 10; thumb.y = 10;
@@ -187,150 +404,10 @@ export class UIManager {
         card.addChild(bg, thumb, mask, name, info, btn, btnTxt);
         card.eventMode = 'static'; card.cursor = 'pointer';
         card.on('pointerdown', () => {
-            this.menuContainer.removeChildren();
+            this.menuContainer.visible = false;
             onSelected(m);
         });
         return card;
-    }
-
-    private static drawTalents(goldLabel: PIXI.Text): void {
-        this.talentContainer.removeChildren();
-        // 面板背景更高，容纳天赋+武器两个区域
-        const bg = new PIXI.Graphics().beginFill(0x111822, 0.95).lineStyle(2, 0x00f0ff).drawRoundedRect(0, 0, 300, 620, 15).endFill();
-        const title = new PIXI.Text("永久升级中心", { fontSize: 22, fill: 0x00f0ff, fontWeight: 'bold' });
-        title.anchor.set(0.5); title.x = 150; title.y = 28;
-        this.talentContainer.addChild(bg, title);
-
-        // ── 天赋区域 ──
-        const talentSec = new PIXI.Text("— 战斗天赋 —", { fontSize: 14, fill: 0x00f0ff });
-        talentSec.anchor.set(0.5); talentSec.x = 150; talentSec.y = 55;
-        this.talentContainer.addChild(talentSec);
-
-        const talents: (keyof typeof SaveManager.state.talents)[] = ['damage', 'fireRate', 'goldBonus', 'critChance'];
-        const names = { damage: '基础火力', fireRate: '射击频率', goldBonus: '收益加成', critChance: '暴击终端' };
-        talents.forEach((key, index) => {
-            const row = new PIXI.Container(); row.y = 72 + index * 65;
-            const lvl = SaveManager.state.talents[key]; const cost = SaveManager.getUpgradeCost(key);
-            const label = new PIXI.Text(`${names[key]} LV.${lvl}`, { fontSize: 16, fill: 0xffffff });
-            label.x = 16; label.y = 2;
-            const upgradeBtn = new PIXI.Graphics(); const canAfford = SaveManager.state.gold >= cost;
-            upgradeBtn.beginFill(canAfford ? 0x005522 : 0x333333).lineStyle(1, canAfford ? 0x00ff88 : 0x555555).drawRoundedRect(180, 0, 100, 36, 6).endFill();
-            const costTxt = new PIXI.Text(`${cost} G`, { fontSize: 14, fill: canAfford ? 0x00ff88 : 0x777777 });
-            costTxt.anchor.set(0.5); costTxt.x = 230; costTxt.y = 18;
-            row.addChild(label, upgradeBtn, costTxt); row.eventMode = 'static'; row.cursor = canAfford ? 'pointer' : 'default';
-            row.on('pointerdown', () => {
-                if (SaveManager.state.gold >= cost) {
-                    SaveManager.state.gold -= cost; (SaveManager.state.talents[key] as number)++; SaveManager.save();
-                    const goldValue = this.formatNumber(SaveManager.state.gold);
-                    goldLabel.text = `金币: ${goldValue}`; this.drawTalents(goldLabel);
-                    this.showFloatingText(SceneManager.width/2, SceneManager.height/2, "升级成功!", 0x00ff00);
-                } else this.showFloatingText(SceneManager.width/2, SceneManager.height/2, "金币不足!", 0xff0000);
-            });
-            this.talentContainer.addChild(row);
-        });
-
-        // ── 武器等级区域 ──
-        const weaponSec = new PIXI.Text("— 武器等级 —", { fontSize: 14, fill: 0xffcc00 });
-        weaponSec.anchor.set(0.5); weaponSec.x = 150; weaponSec.y = 340;
-        this.talentContainer.addChild(weaponSec);
-
-        const weapons = [
-            { id: 'cannon_base', name: '标准激光' },
-            { id: 'fish_tuna_mode', name: '机械鱼模组' },
-            { id: 'gatling', name: '等离子加特林' },
-            { id: 'heavy', name: '重爆核能炮' },
-            { id: 'lightning', name: '连锁闪电' }
-        ];
-        const wLevels = SaveManager.state.weaponLevels || {};
-        weapons.forEach((w, index) => {
-            const row = new PIXI.Container(); row.y = 358 + index * 52;
-            const lvl = wLevels[w.id] || 1;
-            const cost = Math.floor(1000 * Math.pow(2, lvl - 1)); // 1000 → 2000 → 4000 ...
-            const isMax = lvl >= 5;
-            const label = new PIXI.Text(`${w.name} LV.${lvl}`, { fontSize: 15, fill: 0xffffff });
-            label.x = 16; label.y = 2;
-            const upgradeBtn = new PIXI.Graphics();
-            const canAfford = !isMax && SaveManager.state.gold >= cost;
-            upgradeBtn.beginFill(isMax ? 0x332200 : (canAfford ? 0x442200 : 0x222222)).lineStyle(1, isMax ? 0xffaa00 : (canAfford ? 0xffcc00 : 0x555555)).drawRoundedRect(180, 0, 100, 36, 6).endFill();
-            const costTxt = new PIXI.Text(isMax ? 'MAX' : `${cost} G`, { fontSize: 14, fill: isMax ? 0xffaa00 : (canAfford ? 0xffcc00 : 0x777777) });
-            costTxt.anchor.set(0.5); costTxt.x = 230; costTxt.y = 18;
-            row.addChild(label, upgradeBtn, costTxt); row.eventMode = 'static'; row.cursor = (!isMax && canAfford) ? 'pointer' : 'default';
-            row.on('pointerdown', () => {
-                if (!isMax && SaveManager.state.gold >= cost) {
-                    SaveManager.state.gold -= cost;
-                    SaveManager.state.weaponLevels[w.id] = lvl + 1;
-                    SaveManager.save();
-                    const goldValue = this.formatNumber(SaveManager.state.gold);
-                    goldLabel.text = `金币: ${goldValue}`;
-                    this.drawTalents(goldLabel);
-                    this.showFloatingText(SceneManager.width/2, SceneManager.height/2, `武器升级! LV.${lvl+1}`, 0xffcc00);
-                } else if (!isMax) {
-                    this.showFloatingText(SceneManager.width/2, SceneManager.height/2, "金币不足!", 0xff0000);
-                }
-            });
-            this.talentContainer.addChild(row);
-        });
-    }
-
-    private static drawMall(goldLabel: PIXI.Text): void {
-        this.mallContainer.removeChildren();
-        const bg = new PIXI.Graphics().beginFill(0x111822, 0.9).lineStyle(2, 0xff00ff).drawRoundedRect(0, 0, 300, 620, 15).endFill();
-        const title = new PIXI.Text("英雄武器商城", { fontSize: 22, fill: 0xff00ff, fontWeight: 'bold' });
-        title.anchor.set(0.5); title.x = 150; title.y = 28;
-        this.mallContainer.addChild(bg, title);
-
-        const mallWeapons = [
-            { id: 'railgun', name: '热能轨道炮', cost: 50000, tex: 'skin_railgun', desc: '毁灭性双轨打击' },
-            { id: 'void', name: '虚空投影仪', cost: 150000, tex: 'skin_void', desc: '牵引并湮灭目标' },
-            { id: 'acid', name: '生化孢子炮', cost: 300000, tex: 'skin_acid', desc: '剧毒扩散持续伤害' }
-        ];
-
-        mallWeapons.forEach((w, index) => {
-            const row = new PIXI.Container(); row.y = 60 + index * 180;
-            const isUnlocked = SaveManager.state.goldUnlockedWeapons.includes(w.id);
-            
-            const tex = AssetManager.textures[w.tex];
-            if (tex) {
-                console.log(`Mall Icon [${w.id}]: tex valid=${tex.valid}, size=${tex.width}x${tex.height}`);
-            } else {
-                console.error(`Mall Icon [${w.id}]: texture missing in AssetManager!`);
-            }
-
-            const btnBg = new PIXI.Graphics().beginFill(0x222222).lineStyle(2, isUnlocked ? 0xcc00ff : 0x555555).drawRoundedRect(10, 0, 280, 160, 10).endFill();
-            const icon = new PIXI.Sprite(AssetManager.textures[w.tex]); 
-            icon.width = 100; icon.height = 100; icon.x = 20; icon.y = 30;
-            
-            const name = new PIXI.Text(w.name, { fontSize: 18, fill: 0xffffff, fontWeight: 'bold' });
-            name.x = 130; name.y = 25;
-            const desc = new PIXI.Text(w.desc, { fontSize: 13, fill: 0xaaaaaa });
-            desc.x = 130; desc.y = 55;
-            
-            const buyBtn = new PIXI.Graphics();
-            const canAfford = SaveManager.state.gold >= w.cost;
-            buyBtn.beginFill(isUnlocked ? 0x004488 : (canAfford ? 0x880088 : 0x333333))
-                  .drawRoundedRect(130, 90, 140, 40, 8).endFill();
-            const buyTxt = new PIXI.Text(isUnlocked ? "已永久解锁" : `${this.formatNumber(w.cost)} 购买`, { fontSize: 16, fill: 0xffffff });
-            buyTxt.anchor.set(0.5); buyTxt.x = 200; buyTxt.y = 110;
-            
-            row.addChild(btnBg, icon, name, desc, buyBtn, buyTxt);
-            if (!isUnlocked) {
-                row.eventMode = 'static'; row.cursor = canAfford ? 'pointer' : 'default';
-                row.on('pointerdown', () => {
-                    if (SaveManager.state.gold >= w.cost) {
-                        SaveManager.state.gold -= w.cost;
-                        SaveManager.state.goldUnlockedWeapons.push(w.id);
-                        SaveManager.state.weaponLevels[w.id] = 1; // 初始1级
-                        SaveManager.save();
-                        goldLabel.text = `金币: ${this.formatNumber(SaveManager.state.gold)}`;
-                        this.drawMall(goldLabel);
-                        this.showFloatingText(SceneManager.width/2, SceneManager.height/2, `解锁永久武器: ${w.name}`, 0xff00ff);
-                    } else {
-                        this.showFloatingText(SceneManager.width/2, SceneManager.height/2, "金币不足!", 0xff0000);
-                    }
-                });
-            }
-            this.mallContainer.addChild(row);
-        });
     }
 
     private static initShop(): void {
