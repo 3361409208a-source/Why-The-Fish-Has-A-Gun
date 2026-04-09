@@ -140,15 +140,22 @@ export class Fish extends PIXI.Sprite {
         this.mesh.x = - (tex.width * baseScale) / 2;
         this.addChild(this.mesh);
         
-        this.texture = PIXI.Texture.EMPTY;
-        // 计算初始速度向量：让鱼游向中心对角方向，实现真正的“对向游走”
-        let targetX = SceneManager.width / 2 + (Math.random() - 0.5) * 800;
-        let targetY = SceneManager.height / 2 + (Math.random() - 0.5) * 400;
+        // 真正的全方位对向游走逻辑：游向出生点的正对面
+        let tx: number, ty: number;
+        if (y < -100) { // 顶部出生 -> 游向底部
+            tx = x + (Math.random() - 0.5) * 600; ty = SceneManager.height + 300;
+        } else if (y > SceneManager.height + 100) { // 底部出生 -> 游向顶部
+            tx = x + (Math.random() - 0.5) * 600; ty = -300;
+        } else if (x < 0) { // 左侧出生 -> 游向右侧
+            tx = SceneManager.width + 300; ty = y + (Math.random() - 0.5) * 400;
+        } else { // 右侧出生 -> 游向左侧
+            tx = -300; ty = y + (Math.random() - 0.5) * 400;
+        }
         
-        // 增加一点随机偏差，防止所有鱼都去同一个点
-        const angle = Math.atan2(targetY - this.y, targetX - this.x);
+        const angle = Math.atan2(ty - y, tx - x);
         this.vx = Math.cos(angle) * this.originalSpeed;
         this.vy = Math.sin(angle) * this.originalSpeed;
+        this.targetY = ty; // 让追踪逻辑辅助对穿游走，而不是拉回原位
 
         this.hp *= mapMult;
         this.maxHp = this.hp;
@@ -199,9 +206,9 @@ export class Fish extends PIXI.Sprite {
             this.speed += (this.originalSpeed - this.speed) * 0.05 * delta;
         }
 
-        const vAccel = (this.targetY - this.y) * 0.05;
-        this.verticalVelocity = this.verticalVelocity * 0.92 + vAccel * 0.08;
-        this.y += this.verticalVelocity * delta;
+        const vAccel = (this.targetY - this.y) * 0.01;
+        this.verticalVelocity = this.verticalVelocity * 0.95 + vAccel * 0.05;
+        // 移除此处 redundant y += verticalVelocity 逻辑，统一在下方位移段落处理
         // 限制在画面内 (适配 1920x1080)
         this.y = Math.max(-300, Math.min(SceneManager.height + 300, this.y));
 
@@ -241,8 +248,26 @@ export class Fish extends PIXI.Sprite {
 
         // 真正的 2D 对向位移
         const speedRatio = this.speed / this.originalSpeed;
+        // 如果垂直速度分量 vy 已经很大，则大幅减弱追踪逻辑 verticalVelocity，防止速度叠加速率过快
+        const vTrackComp = Math.abs(this.vy) > 0.2 ? this.verticalVelocity * 0.1 : this.verticalVelocity;
+        
         this.x += this.vx * speedRatio * delta + hitShakeX;
-        this.y += (this.vy * speedRatio + this.verticalVelocity) * delta + hitShakeY;
+        this.y += (this.vy * speedRatio + vTrackComp) * delta + hitShakeY;
+
+        // 旋转朝向逻辑：让鱼头指向游动方向
+        const totalVy = this.vy * speedRatio + vTrackComp;
+        const totalVx = this.vx * speedRatio;
+        const rotationAngle = Math.atan2(totalVy, totalVx);
+        
+        if (totalVx > 0) {
+            // 向右游：资产默认向左，需 scale.x = -1，旋转直接使用 angle
+            this.scale.x = -1;
+            this.rotation = rotationAngle;
+        } else {
+            // 向左游：scale.x = 1，旋转需要补偿 PI (180度)
+            this.scale.x = 1;
+            this.rotation = rotationAngle + Math.PI;
+        }
 
         const margin = 800;
         if (this.x < -margin || this.x > SceneManager.width + margin || 

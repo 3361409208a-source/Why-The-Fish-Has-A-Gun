@@ -73,8 +73,19 @@ export class AssetManager {
 
     private static async loadExternalAssets(): Promise<void> {
         const loadImage = (src: string) => new Promise<PIXI.Texture>((resolve, reject) => {
-            const img = (window as any).wx ? (window as any).wx.createImage() : new Image();
-            img.onload = () => resolve(PIXI.Texture.from(img));
+            const isWX = !!(window as any).wx;
+            const img = isWX ? (window as any).wx.createImage() : new Image();
+            img.onload = () => {
+                // 微信环境最稳妥方案：手动创建 BaseTexture 并显式包装
+                try {
+                    const resource = new PIXI.BaseTexture(img);
+                    const tex = new PIXI.Texture(resource);
+                    resolve(tex);
+                } catch (e) {
+                    console.warn(`Manual texture creation failed for ${src}, falling back.`, e);
+                    resolve(PIXI.Texture.EMPTY);
+                }
+            };
             img.onerror = (e: any) => reject(new Error(`Failed to load: ${src}`));
             img.src = src;
         });

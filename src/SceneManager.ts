@@ -19,11 +19,35 @@ export class SceneManager {
     public static height = 1080;
     private static app: PIXI.Application;
     private static layers: Map<string, PIXI.Container> = new Map();
-    private static bgSprite: PIXI.TilingSprite | null = null;
+    private static bgSprite: PIXI.Sprite | null = null;
+    private static isTiled: boolean = false;
 
-    public static setBackground(sprite: PIXI.TilingSprite): void {
+    private static underwaterFilter: PIXI.Filter | null = null;
+    private static filterTime: number = 0;
+
+    public static setBackground(sprite: PIXI.Sprite, isTiled: boolean = false): void {
         this.bgSprite = sprite;
-        this.applyResize(); // 立即执行一次适配，防止初始加载时背景没对齐
+        this.isTiled = isTiled;
+        
+        // 增加动态海底扭曲滤镜
+        if (!this.underwaterFilter) {
+            this.underwaterFilter = new PIXI.Filter(undefined, `
+                varying vec2 vTextureCoord;
+                uniform sampler2D uSampler;
+                uniform float uTime;
+                
+                void main(void) {
+                    vec2 uv = vTextureCoord;
+                    // 微调扭曲力度至平衡点 (0.0018), 既有水动感又不显突兀
+                    float waveX = sin(uv.y * 8.0 + uTime * 1.5) * 0.0018;
+                    float waveY = cos(uv.x * 8.0 + uTime * 1.2) * 0.0018;
+                    gl_FragColor = texture2D(uSampler, uv + vec2(waveX, waveY));
+                }
+            `, { uTime: 0 });
+            this.getLayer(Layers.Background).filters = [this.underwaterFilter];
+        }
+
+        this.applyResize(); 
     }
 
     public static init(app: PIXI.Application): void {
@@ -38,6 +62,52 @@ export class SceneManager {
 
         this.applyResize();
         window.addEventListener('resize', () => this.applyResize());
+        
+        // 启动全局更新
+        this.app.ticker.add((delta) => {
+            // 背景滤镜更新
+            if (this.underwaterFilter) {
+                this.filterTime += delta * 0.01;
+                this.underwaterFilter.uniforms.uTime = this.filterTime;
+            }
+            
+            // 环境气泡生成与更新
+            this.updateAmbient(delta);
+        });
+    }
+
+    private static bubbles: PIXI.Graphics[] = [];
+    private static bubbleTimer: number = 0;
+
+    private static updateAmbient(delta: number): void {
+        this.bubbleTimer += delta;
+        if (this.bubbleTimer > 25) { // 约 0.4 秒产生一个
+            this.spawnBubble();
+            this.bubbleTimer = 0;
+        }
+
+        const bgLayer = this.getLayer(Layers.Background);
+        for (let i = this.bubbles.length - 1; i >= 0; i--) {
+            const b = this.bubbles[i];
+            b.y -= (b as any).speed; // 向上飘
+            b.x += Math.sin(b.y * 0.05) * 0.5; // 轻微左右晃动
+            b.alpha -= 0.002;
+            if (b.y < -100 || b.alpha <= 0) {
+                bgLayer.removeChild(b);
+                this.bubbles.splice(i, 1);
+            }
+        }
+    }
+
+    private static spawnBubble(): void {
+        const b = new PIXI.Graphics();
+        const size = 1 + Math.random() * 4;
+        b.beginFill(0xffffff, 0.4).drawCircle(0, 0, size).endFill();
+        b.x = Math.random() * this.width;
+        b.y = this.height + 50;
+        (b as any).speed = 0.5 + Math.random() * 1.5;
+        this.getLayer(Layers.Background).addChild(b);
+        this.bubbles.push(b);
     }
 
     private static createLayer(name: string): void {
@@ -84,19 +154,44 @@ export class SceneManager {
             this.app.stage.y = (vh - this.width * scale) / 2;
         }
 
-        // 平铺背景全屏适配 (适配旋转后的坐标系，确保覆盖物理全屏)
+        // 背景适配逻辑
         if (this.bgSprite) {
-            this.bgSprite.width = targetVW / scale;
-            this.bgSprite.height = targetVH / scale;
-            
-            if (rotation === 0) {
-                this.bgSprite.x = -this.app.stage.x / scale;
-                this.bgSprite.y = -this.app.stage.y / scale;
+            if (this.isTiled && (this.bgSprite as any).tileScale) {
+                // 平铺模式 (TilingSprite)
+                const ts = this.bgSprite as any;
+                ts.width = targetVW / scale;
+                ts.height = targetVH / scale;
+                
+                if (rotation === 0) {
+                    ts.x = -this.app.stage.x / scale;
+                    ts.y = -this.app.stage.y / scale;
+                } else {
+                    ts.x = -this.app.stage.y / scale;
+                    ts.y = (this.app.stage.x - vw) / scale;
+                }
             } else {
-                // 旋转模式下的坐标对齐：逻辑 (0,0) 在屏幕 (vw, 0)
-                // 我们需要背景反向偏移以覆盖屏幕左侧和上方
-                this.bgSprite.x = -this.app.stage.y / scale;
-                this.bgSprite.y = (this.app.stage.x - vw) / scale;
+                // 全图拉伸覆盖模式 (Cover Mode)
+                const texW = this.bgSprite.texture.width;
+                const texH = this.bgSprite.texture.height;
+                
+                // 计算铺满屏幕所需的比例
+                const bgScale = Math.max(
+                    (targetVW / scale) / texW,
+                    (targetVH / scale) / texH
+                );
+                
+                this.bgSprite.scale.set(bgScale);
+                this.bgSprite.anchor.set(0.5);
+                
+                // 将背景居中锁定
+                if (rotation === 0) {
+                    this.bgSprite.x = (targetVW / scale) / 2 - this.app.stage.x / scale;
+                    this.bgSprite.y = (targetVH / scale) / 2 - this.app.stage.y / scale;
+                } else {
+                    // 旋转模式下的对齐
+                    this.bgSprite.x = (targetVW / scale) / 2 - this.app.stage.y / scale;
+                    this.bgSprite.y = (targetVH / scale) / 2 + (this.app.stage.x - vw) / scale;
+                }
             }
         }
     }

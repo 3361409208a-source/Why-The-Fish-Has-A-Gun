@@ -27,10 +27,21 @@ export class SaveManager {
      * 加载存档
      */
     public static load(): void {
-        const data = localStorage.getItem(this.SAVE_KEY);
+        let data: string | null = null;
+        try {
+            // 兼容微信小游戏环境
+            if (typeof (window as any).wx !== 'undefined') {
+                data = (window as any).wx.getStorageSync(this.SAVE_KEY);
+            } else if (typeof localStorage !== 'undefined') {
+                data = localStorage.getItem(this.SAVE_KEY);
+            }
+        } catch (err) {
+            console.warn('Save data load failed, using defaults');
+        }
+
         if (data) {
             try {
-                const parsed = JSON.parse(data);
+                const parsed = typeof data === 'string' ? JSON.parse(data) : data;
                 // 深合并：保护新字段（如 weaponLevels）不被旧存档数据覆盖掉
                 this.state.gold = parsed.gold ?? this.state.gold;
                 this.state.unlockedMaps = parsed.unlockedMaps ?? this.state.unlockedMaps;
@@ -50,7 +61,16 @@ export class SaveManager {
      * 保存存档
      */
     public static save(): void {
-        localStorage.setItem(this.SAVE_KEY, JSON.stringify(this.state));
+        try {
+            const dataStr = JSON.stringify(this.state);
+            if (typeof (window as any).wx !== 'undefined') {
+                (window as any).wx.setStorageSync(this.SAVE_KEY, dataStr);
+            } else if (typeof localStorage !== 'undefined') {
+                localStorage.setItem(this.SAVE_KEY, dataStr);
+            }
+        } catch (err) {
+            console.error('Failed to save data', err);
+        }
     }
 
     /**

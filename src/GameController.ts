@@ -68,44 +68,69 @@ export class GameController {
     private comboTimer: number = 0;
     private lastComboValue: number = 0;
 
-    constructor(app: PIXI.Application, config: any) {
+    private tickerFunc: (delta: number) => void;
+
+    private onBack?: () => void;
+
+    constructor(app: PIXI.Application, config: any, onBack?: () => void) {
         this.app = app;
+        this.onBack = onBack;
         this.pool = PoolManager.getInstance();
         
         this.hpMultiplier = config.hpMult || 1.0;
         this.spawnRate = config.spawnRate || 1.0;
         this.rewardMultiplier = config.reward || 1.0;
         
-        const skins = {
-            'skin_heavy': 'assets/skin_heavy.png',
-            'skin_tuna': 'assets/skin_tuna.png',
-            'skin_lightning': 'assets/skin_lightning.png'
-        };
         this.initCannon();
         this.initInteraction();
 
-        // [修复] 同步从存档读取武器等级，保证进入战场时等级与主页一致
+        // 绑定更新函数以便后续移除
+        this.tickerFunc = (delta: number) => {
+            try {
+                this.update(delta);
+            } catch (err: any) {
+                if (err.message.includes('Resource')) {
+                    // 屏蔽特定环境下的资源检测报错，防止刷屏
+                    return;
+                }
+                console.error('Update Crash:', err.message);
+            }
+        };
+        app.ticker.add(this.tickerFunc);
+
         const savedLevels = SaveManager.state.weaponLevels || {};
         for (const id of Object.keys(this.weaponLevels)) {
             if (savedLevels[id]) this.weaponLevels[id] = savedLevels[id];
         }
         this.updateShopUI();
         
-        app.ticker.add((delta: number) => {
-            try {
-                this.update(delta);
-            } catch (err: any) {
-                console.error('Update Crash:', err.message);
-            }
-        });
-
-        // [核心优化]：开局即高潮：预先在屏幕内刷出 15-25 只鱼，避免开局等待两边进场
+        // 预热鱼群
         const preWarmCount = 15 + Math.floor(Math.random() * 10);
         for (let i = 0; i < preWarmCount; i++) {
-            this.spawnFish(
-                undefined, 
-                200 + Math.random() * (SceneManager.width - 400) // X 轴随机分布在屏幕内
-            );
+            this.spawnFish(undefined, 200 + Math.random() * (SceneManager.width - 400));
+        }
+    }
+
+    public destroy(): void {
+        this.app.ticker.remove(this.tickerFunc);
+        this.app.stage.off('pointerdown');
+        this.app.stage.off('pointerup');
+        this.app.stage.off('pointermove');
+        
+        // 清理由本控制器添加的所有阶段监听器或容器
+        if (this.app.stage.hitArea) this.app.stage.hitArea = null;
+
+        // 清理所有实体
+        [...this.fishes, ...this.bullets, ...this.cores, ...this.particles, ...this.shockwaves, ...this.lightnings].forEach(e => {
+            if (e.parent) e.parent.removeChild(e);
+            if (e.kill) e.kill();
+        });
+        
+        this.fishes = []; this.bullets = []; this.cores = [];
+        this.particles = []; this.shockwaves = []; this.lightnings = [];
+        
+        if (this.cannon && this.cannon.parent) {
+            this.cannon.parent.removeChild(this.cannon);
         }
     }
 
@@ -115,28 +140,37 @@ export class GameController {
         this.cannon.y = SceneManager.height - 20;
         SceneManager.getLayer(Layers.UI).addChild(this.cannon);
 
-        // 添加"返回主页"按钮（统一深海风格）
         const backBtn = new PIXI.Container();
         backBtn.x = 20; backBtn.y = SceneManager.height - 66;
         
         const btnBg = new PIXI.Graphics()
-            .beginFill(0x050e1a, 0.9)
-            .lineStyle(2, 0xff4444, 0.9)
-            .drawRoundedRect(0, 0, 130, 44, 10)
-            .endFill();
+            .beginFill(0x050e1a, 0.9).lineStyle(2, 0xff4444, 0.9)
+            .drawRoundedRect(0, 0, 130, 44, 10).endFill();
         const btnTxt = new PIXI.Text("撤退返回", { 
             fontFamily: 'Verdana', fontSize: 16, fill: 0xff8888, fontWeight: 'bold' 
         });
         btnTxt.anchor.set(0.5); btnTxt.x = 65; btnTxt.y = 22;
         backBtn.addChild(btnBg, btnTxt);
         
-        backBtn.eventMode = 'static';
-        backBtn.cursor = 'pointer';
-        backBtn.on('pointerover', () => { btnBg.tint = 0xff6666; });
-        backBtn.on('pointerout', () => { btnBg.tint = 0xffffff; });
+        backBtn.eventMode = 'static'; backBtn.cursor = 'pointer';
         backBtn.on('pointerdown', () => {
             UIManager.showConfirm("确定要放弃本次猎杀并返回总部吗？", "⚠ 撤退确认").then(ok => {
-                if (ok) location.reload();
+                if (ok) {
+                    if (this.onBack) {
+                        this.onBack();
+                    } else {
+                        // 降级原逻辑
+                        this.destroy();
+                        SceneManager.getLayer(Layers.Game).removeChildren();
+                        SceneManager.getLayer(Layers.Bullet).removeChildren();
+                        SceneManager.getLayer(Layers.FX).removeChildren();
+                        SceneManager.getLayer(Layers.UI).removeChildren();
+                        UIManager.init(this.app);
+                        UIManager.showMapSelection((config) => {
+                            new GameController(this.app, config);
+                        });
+                    }
+                }
             });
         });
         SceneManager.getLayer(Layers.UI).addChild(backBtn);
@@ -511,31 +545,49 @@ export class GameController {
         let side: 'left' | 'right' = Math.random() > 0.5 ? 'left' : 'right';
         let x: number, y: number;
 
+        // 基础出生点计算
         if (preferredX !== undefined && preferredY !== undefined) {
             x = preferredX; y = preferredY;
         } else {
-            // 四周随机生成
-            if (sideRoll < 0.35) { // 35% 左侧
-                side = 'left'; x = -300; y = 100 + Math.random() * (SceneManager.height - 300);
-            } else if (sideRoll < 0.7) { // 35% 右侧
-                side = 'right'; x = SceneManager.width + 300; y = 100 + Math.random() * (SceneManager.height - 300);
-            } else if (sideRoll < 0.85) { // 15% 顶部
-                x = 100 + Math.random() * (SceneManager.width - 200); y = -200;
-            } else { // 15% 底部
-                x = 100 + Math.random() * (SceneManager.width - 200); y = SceneManager.height + 200;
-            }
+            if (sideRoll < 0.35) { side = 'left'; x = -300; y = 100 + Math.random() * (SceneManager.height - 300); }
+            else if (sideRoll < 0.7) { side = 'right'; x = SceneManager.width + 300; y = 100 + Math.random() * (SceneManager.height - 300); }
+            else if (sideRoll < 0.85) { x = 100 + Math.random() * (SceneManager.width - 200); y = -300; }
+            else { x = 100 + Math.random() * (SceneManager.width - 200); y = SceneManager.height + 300; }
         }
+
+        // --- 鱼群化改造：随机触发“鱼群爆发” ---
+        // 15% 概率生成一整波鱼群（8-15只），共享大致相同的航线
+        const isSchool = Math.random() < 0.15 && preferredX === undefined;
+        const schoolSize = isSchool ? (8 + Math.floor(Math.random() * 8)) : 1;
         
-        // BOSS 概率
-        const bossThreshold = 0.005 * this.spawnRate;
-        const isBoss = Math.random() < bossThreshold;
-        
-        const fish = this.pool.get('fish', () => new Fish());
-        if (fish) {
-            (window as any).DmgMultCurrent = this.hpMultiplier;
-            fish.spawn(x, y, side, isBoss);
-            SceneManager.getLayer(Layers.Game).addChild(fish);
-            this.fishes.push(fish);
+        // 预设群体共同的目标偏移
+        const groupTargetX = SceneManager.width / 2 + (Math.random() - 0.5) * 600;
+        const groupTargetY = SceneManager.height / 2 + (Math.random() - 0.5) * 400;
+
+        for (let i = 0; i < schoolSize; i++) {
+            const bossThreshold = 0.005 * this.spawnRate;
+            const isBoss = Math.random() < bossThreshold;
+            
+            const fish = this.pool.get('fish', () => new Fish());
+            if (fish) {
+                (window as any).DmgMultCurrent = this.hpMultiplier;
+                
+                // 给群组成员一点位置扰动 (松散阵型)
+                const offsetX = (Math.random() - 0.5) * 150;
+                const offsetY = (Math.random() - 0.5) * 150;
+                
+                fish.spawn(x + offsetX, y + offsetY, side, isBoss);
+                
+                // [注入逻辑] 强行修正这只鱼的目标，使其向群体目标靠拢
+                if (isSchool) {
+                    const angle = Math.atan2(groupTargetY - (y + offsetY), groupTargetX - (x + offsetX));
+                    (fish as any).vx = Math.cos(angle) * (fish as any).originalSpeed;
+                    (fish as any).vy = Math.sin(angle) * (fish as any).originalSpeed;
+                }
+
+                SceneManager.getLayer(Layers.Game).addChild(fish);
+                this.fishes.push(fish);
+            }
         }
     }
 
