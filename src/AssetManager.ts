@@ -7,7 +7,7 @@ export class AssetManager {
     public static textures: { [key: string]: PIXI.Texture } = {};
     private static audioCtx: AudioContext;
 
-    public static async init(renderer: PIXI.Renderer): Promise<void> {
+    public static async init(renderer: PIXI.Renderer, onProgress?: (p: number) => void): Promise<void> {
         console.log('Starting asset initialization...');
 
         try {
@@ -16,7 +16,7 @@ export class AssetManager {
             }
 
             this.generateTextures(renderer);
-            await this.loadExternalAssets();
+            await this.loadExternalAssets(onProgress);
 
             console.log('Asset Manager Initialized Successfully');
         } catch (error: any) {
@@ -71,39 +71,9 @@ export class AssetManager {
         this.textures['gen_lightning_skin'] = renderer.generateTexture(lgtG);
     }
 
-    private static async loadExternalAssets(): Promise<void> {
-        const loadImage = (src: string) => new Promise<PIXI.Texture>((resolve, reject) => {
-            const isWX = !!(window as any).wx;
-            // 微信环境下创建原生图片对象
-            const img = isWX ? (window as any).wx.createImage() : new Image();
-            
-            // 重要：在微信环境下注入 tagName 属性，并在 src 赋值前设置
-            if (isWX) {
-                (img as any).tagName = 'IMG';
-            }
-
-            img.onload = () => {
-                try {
-                    // 强制使用 BaseTexture 包装，绕过资源自动检测
-                    const base = PIXI.BaseTexture.from(img, {
-                        resourceOptions: { autoLoad: true }
-                    });
-                    const tex = new PIXI.Texture(base);
-                    resolve(tex);
-                } catch (e) {
-                    console.error(`PIXI Texture wrapping failed: ${src}`, e);
-                    resolve(PIXI.Texture.WHITE);
-                }
-            };
-            img.onerror = (err: any) => {
-                console.error(`Img load error: ${src}`, err);
-                reject(err);
-            };
-            img.src = src;
-        });
-
-        // 路径适配：微信环境下使用相对路径 './assets/...' 最为稳妥
-        const getPath = (p: string) => (window as any).wx ? `./${p}` : `/${p}`;
+    private static async loadExternalAssets(onProgress?: (p: number) => void): Promise<void> {
+        const isWX = !!(window as any).wx;
+        const getPath = (p: string) => `./${p}`;
 
         const assetsToLoad = {
             'bg_ocean': 'assets/bg_v2.png',
@@ -124,13 +94,59 @@ export class AssetManager {
             'skin_lightning': 'assets/skin_lightning.png'
         };
 
-        for (const [key, path] of Object.entries(assetsToLoad)) {
-            const tex = await loadImage(getPath(path)).catch((err) => {
-                console.warn(`AssetManager: Skip ${key} due to load error:`, err.message);
-                return null;
-            });
-            if (tex) this.textures[key] = tex;
-        }
+        const total = Object.keys(assetsToLoad).length;
+        let loaded = 0;
+
+        const loadPromises = Object.entries(assetsToLoad).map(async ([key, path]) => {
+            const finalPath = getPath(path);
+            try {
+                let tex: PIXI.Texture;
+                
+                if (isWX) {
+                    // 微信环境下，最稳妥的是手动 wx.createImage
+                    tex = await new Promise<PIXI.Texture>((resolve, reject) => {
+                        const img = (window as any).wx.createImage();
+                        // 兼容性修复：部分环境 tagName 只读，使用 defineProperty 强制注入
+                        try {
+                            Object.defineProperty(img, 'tagName', {
+                                value: 'IMG',
+                                writable: true,
+                                configurable: true
+                            });
+                        } catch (e) {
+                            console.warn('AssetManager: Failed to inject tagName to WX image');
+                        }
+                        
+                        img.onload = () => {
+                            const base = PIXI.BaseTexture.from(img);
+                            resolve(new PIXI.Texture(base));
+                        };
+                        img.onerror = reject;
+                        img.src = finalPath;
+                    });
+                } else {
+                    // 浏览器环境下使用 Texture.from
+                    tex = PIXI.Texture.from(finalPath);
+                    if (!tex.baseTexture.valid) {
+                        await new Promise((resolve) => {
+                            tex.baseTexture.once('loaded', resolve);
+                            tex.baseTexture.once('error', resolve);
+                        });
+                    }
+                }
+
+                this.textures[key] = tex;
+                loaded++;
+                if (onProgress) onProgress(loaded / total);
+            } catch (err) {
+                console.error(`AssetManager Error [${key}]:`, err);
+                this.textures[key] = PIXI.Texture.WHITE;
+                loaded++;
+                if (onProgress) onProgress(loaded / total);
+            }
+        });
+
+        await Promise.all(loadPromises);
     }
 
     public static playSound(type: string): void {

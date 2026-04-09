@@ -80,55 +80,64 @@ export class Fish extends PIXI.Sprite {
         }
 
         const mapMult = (window as any).DmgMultCurrent || 1.0;
-        let tex: PIXI.Texture;
+        let tex: PIXI.Texture | undefined;
         let baseScale = 1.0;
 
         if (isBoss) {
-            // Boss HP 随机因子：0.1 ~ 1.0 倍，用平方根让低血量更容易出现
             const hpRoll = 0.1 + Math.random() * 0.9;
             const bossType = Math.random();
             if (bossType < 0.4) {
                 this.bossKey = 'dragon';
                 tex = AssetManager.textures['fish_dragon'] || AssetManager.textures['fish_shark'];
-                this.hp = Math.floor(4800 * hpRoll); this.originalSpeed = 1.1; baseScale = 1.5 * (500 / (tex.width || 1024));
+                const w = tex ? (tex.width || 1024) : 1024;
+                this.hp = Math.floor(4800 * hpRoll); this.originalSpeed = 1.1; baseScale = 1.5 * (500 / w);
             } else if (bossType < 0.7) {
                 this.bossKey = 'kraken';
                 tex = AssetManager.textures['fish_kraken'] || AssetManager.textures['fish_shark'];
-                this.hp = Math.floor(8000 * hpRoll); this.originalSpeed = 0.4; baseScale = 3.8 * (150 / tex.width);
+                const w = tex ? (tex.width || 1024) : 1024;
+                this.hp = Math.floor(8000 * hpRoll); this.originalSpeed = 0.4; baseScale = 3.8 * (150 / w);
             } else {
                 this.bossKey = 'shark';
                 tex = AssetManager.textures['fish_shark'];
-                this.hp = Math.floor(4000 * hpRoll); this.originalSpeed = 0.6; baseScale = 3.2 * (150 / tex.width);
+                const w = tex ? (tex.width || 1024) : 1024;
+                this.hp = Math.floor(4000 * hpRoll); this.originalSpeed = 0.6; baseScale = 3.2 * (150 / w);
             }
-            // 血量越低速度越快（残血精英 boss 会更狡猾）
             this.originalSpeed *= (1.0 + (1.0 - hpRoll) * 0.6);
         } else if (isMinion) {
-            // 小崽子：体积只有原来的 1/4，血量极低
             this.bossKey = 'minion';
             tex = AssetManager.textures['fish_tuna']; 
-            this.hp = 1;
-            this.originalSpeed = 4.0 + Math.random() * 3.0; // 极速到处乱跑
-            baseScale = 0.3 * (100 / tex.width);
-            // 给一个小崽子随机散开的垂直目标
+            this.hp = 1; this.originalSpeed = 4.0 + Math.random() * 3.0;
+            const w = tex ? (tex.width || 1024) : 1024;
+            baseScale = 0.3 * (100 / w);
             this.targetY += (Math.random() - 0.5) * 400;
         } else {
             this.bossKey = '';
             const speciesRand = Math.random();
             if (speciesRand < 0.3) {
                 tex = AssetManager.textures['fish_angler']; this.hp = 20;
-                this.originalSpeed = 1.2; baseScale = 0.6 * (100 / tex.width);
+                this.originalSpeed = 1.2;
+                const w = tex ? (tex.width || 1024) : 1024;
+                baseScale = 0.6 * (100 / w);
             } else if (speciesRand < 0.6) {
                 this.fishType = 'jelly'; tex = AssetManager.textures['fish_jelly']; 
-                this.hp = 50; this.originalSpeed = 0.4; baseScale = 1.0 * (100 / tex.width);
+                this.hp = 50; this.originalSpeed = 0.4;
+                const w = tex ? (tex.width || 1024) : 1024;
+                baseScale = 1.0 * (100 / w);
             } else {
                 tex = AssetManager.textures['fish_tuna']; this.hp = 100;
-                this.originalSpeed = 0.8; baseScale = 1.4 * (100 / tex.width);
+                this.originalSpeed = 0.8;
+                const w = tex ? (tex.width || 1024) : 1024;
+                baseScale = 1.4 * (100 / w);
             }
         }
 
+        // 最终兜底，确保 tex 一定存在
+        if (!tex) tex = PIXI.Texture.WHITE;
+
         const segmentCount = (isBoss || isMinion) ? 15 : 8;
         this.meshPoints = [];
-        const segmentWidth = tex.width / (segmentCount - 1);
+        const texW = tex.width || 1024;
+        const segmentWidth = texW / (segmentCount - 1);
         for (let i = 0; i < segmentCount; i++) {
             this.meshPoints.push(new PIXI.Point(i * segmentWidth, 0));
         }
@@ -136,7 +145,7 @@ export class Fish extends PIXI.Sprite {
         this.mesh = new PIXI.SimpleRope(tex, this.meshPoints);
         this.mesh.filters = [Fish._sharedFilter];
         this.mesh.scale.set(baseScale);
-        this.mesh.x = - (tex.width * baseScale) / 2;
+        this.mesh.x = - (texW * baseScale) / 2;
         this.addChild(this.mesh);
         
         // 真正的全方位对向游走逻辑：游向出生点的正对面

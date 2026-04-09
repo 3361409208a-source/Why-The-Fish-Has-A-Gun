@@ -111,8 +111,40 @@ const initGame = async () => {
     };
     syncTalents();
 
-    // 3. 初始化所有管理器
-    await AssetManager.init(app.renderer as PIXI.Renderer);
+    // 3. 构建加载界面
+    const loadingLayer = new PIXI.Container();
+    app.stage.addChild(loadingLayer);
+
+    const loadBg = new PIXI.Graphics().beginFill(0x00050a).drawRect(0, 0, 1920, 1080).endFill();
+    loadingLayer.addChild(loadBg);
+
+    const barWidth = 600;
+    const barFrame = new PIXI.Graphics().lineStyle(2, 0x00f0ff, 0.5).drawRoundedRect(960 - barWidth/2, 600, barWidth, 20, 10);
+    const progressBar = new PIXI.Graphics();
+    const loadText = new PIXI.Text('正在连接深海潜行系统...', {
+        fontFamily: 'Verdana', fontSize: 24, fill: 0x00f0ff, fontWeight: 'bold'
+    });
+    loadText.anchor.set(0.5); loadText.x = 960; loadText.y = 550;
+    loadingLayer.addChild(barFrame, progressBar, loadText);
+
+    // 4. 初始化所有管理器并更新进度
+    await AssetManager.init(app.renderer as PIXI.Renderer, (p) => {
+        const percent = Math.floor(p * 100);
+        loadText.text = `深度同步中... ${percent}%`;
+        progressBar.clear().beginFill(0x00f0ff, 0.8).drawRoundedRect(960 - barWidth/2, 600, barWidth * p, 20, 10).endFill();
+    });
+
+    // 加载完成，淡出加载界面
+    app.ticker.add((delta) => {
+        if (loadingLayer.alpha > 0) {
+            loadingLayer.alpha -= 0.05 * delta;
+            if (loadingLayer.alpha <= 0) {
+                loadingLayer.visible = false;
+                app.stage.removeChild(loadingLayer);
+            }
+        }
+    });
+
     SceneManager.init(app);
     UIManager.init(app);
 
