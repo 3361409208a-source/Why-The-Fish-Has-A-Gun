@@ -39,16 +39,19 @@ export class Bullet extends PIXI.Sprite {
         
         switch(type) {
             case 'fish_tuna_mode': baseSpeed = 10; baseDmg = 1.5; break;
-            case 'gatling': baseSpeed = 18; baseDmg = 0.6; break;
+            case 'gatling': baseSpeed = 18; baseDmg = 1.2; break; // 恢复加特林的基础威力
             case 'heavy': baseSpeed = 8; baseDmg = 12; break;
-            case 'lightning': baseSpeed = 25; baseDmg = 3; break;
+            case 'lightning': baseSpeed = 25; baseDmg = 0.8; break; // 降低基础威力至 0.8
         }
+
+        const dmgTalent = (window as any).TalentDmgMult || 1.0;
+        const speedTalent = (window as any).TalentSpeedMult || 1.0;
 
         // 等级加成：每级增加 50% 伤害，20% 速度，15% 尺寸
         const bonus = (level - 1);
-        this.speed = baseSpeed * (1 + bonus * 0.2);
-        // 整体伤害增加 100% (即伤害 x1)
-        this.damage = baseDmg * (1 + bonus * 0.4) * 2;
+        this.speed = baseSpeed * (1 + bonus * 0.2) * speedTalent;
+        // 整体伤害
+        this.damage = baseDmg * (1 + bonus * 0.4) * 2 * dmgTalent;
         
         // 关键修复：由于生成图分辨率极高(1024)，必须强制缩放到合理的像素尺寸(30px)
         const targetSize = 30 * (1 + bonus * 0.15);
@@ -57,8 +60,9 @@ export class Bullet extends PIXI.Sprite {
     }
 
     public fire(x: number, y: number, angle: number): void {
-        this.x = x;
-        this.y = y;
+        const offset = 60; // 枪口偏移量，确保子弹从前端射出
+        this.x = x + Math.cos(angle) * offset;
+        this.y = y + Math.sin(angle) * offset;
         this.rotation = angle;
         this.vx = Math.cos(angle) * this.speed;
         this.vy = Math.sin(angle) * this.speed;
@@ -83,8 +87,8 @@ export class Bullet extends PIXI.Sprite {
             return;
         }
 
-        // 边界回收 (增加双重判定：如果父级消失或不可见也回收)
-        const margin = 100;
+        // 边界回收优化：大幅度增加边界留白 (从 100 增加到 400)，防止子弹在接近边缘时过早消失
+        const margin = 400;
         const outOfBounds = (this.x < -margin || this.x > SceneManager.width + margin || 
                             this.y < -margin || this.y > SceneManager.height + margin);
         

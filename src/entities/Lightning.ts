@@ -13,29 +13,36 @@ export class Lightning extends PIXI.Graphics {
 
     public spawn(x1: number, y1: number, x2: number, y2: number): void {
         this.clear();
-        this.lineStyle(2, 0x00ffff, 1);
-        this.moveTo(x1, y1);
+        
+        // 绘制三层复合闪电：外层青色晕染 + 中层电道 + 核心白光
+        // 这样可以模拟出高压电荷的“过曝”视觉效果，看起来更亮、更有攻击性
+        this.drawLightningPath(x1, y1, x2, y2, 40, 6, 0x00ffff, 0.3); // 外层
+        this.drawLightningPath(x1, y1, x2, y2, 20, 3, 0x00ffff, 0.8); // 中层
+        this.drawLightningPath(x1, y1, x2, y2, 10, 1.5, 0xffffff, 1.0); // 内层
 
-        // 分段绘制闪电，模拟折线感
-        const segments = 4;
-        for (let i = 1; i <= segments; i++) {
-            const tx = x1 + (x2 - x1) * (i / segments) + (Math.random() - 0.5) * 30;
-            const ty = y1 + (y2 - y1) * (i / segments) + (Math.random() - 0.5) * 30;
-            this.lineTo(tx, ty);
-        }
-        this.lineTo(x2, y2);
-
-        this.life = 1.0;
+        this.life = 1.2;
         this.alpha = 1.0;
         this.isActive = true;
         this.visible = true;
+    }
+
+    private drawLightningPath(x1: number, y1: number, x2: number, y2: number, jitter: number, thickness: number, color: number, alpha: number): void {
+        this.lineStyle(thickness, color, alpha);
+        this.moveTo(x1, y1);
+        const segments = 6;
+        for (let i = 1; i <= segments; i++) {
+            const tx = x1 + (x2 - x1) * (i / segments) + (Math.random() - 0.5) * jitter;
+            const ty = y1 + (y2 - y1) * (i / segments) + (Math.random() - 0.5) * jitter;
+            this.lineTo(tx, ty);
+        }
+        this.lineTo(x2, y2);
     }
 
     public update(delta: number): void {
         if (!this.isActive) return;
 
         this.life -= 0.1 * delta;
-        this.alpha = this.life;
+        this.alpha = Math.max(0, this.life);
 
         if (this.life <= 0) {
             this.kill();

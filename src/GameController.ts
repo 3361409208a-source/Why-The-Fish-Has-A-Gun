@@ -22,9 +22,16 @@ export class GameController {
     // 经济系统
     private crystals: number = 2000;
     
-    // 武器系统
-    private unlockedWeapons: string[] = ['cannon_base'];
+    // 武器系统 (初始全部解锁)
+    private unlockedWeapons: string[] = ['cannon_base', 'fish_tuna_mode', 'gatling', 'heavy', 'lightning'];
     private currentWeaponIndex: number = 0;
+    private skinMap: {[key: string]: string} = {
+        'cannon_base': 'cannon_v3',
+        'gatling': 'skin_gatling',
+        'heavy': 'skin_heavy',
+        'lightning': 'skin_lightning',
+        'fish_tuna_mode': 'skin_tuna'
+    };
     private weaponLevels: {[id: string]: number} = {
         'cannon_base': 1,
         'fish_tuna_mode': 1,
@@ -57,6 +64,10 @@ export class GameController {
         { id: 'lightning', name: '连锁闪电', cost: 15000 }
     ];
 
+    private comboCount: number = 0;
+    private comboTimer: number = 0;
+    private lastComboValue: number = 0;
+
     constructor(app: PIXI.Application, config: any) {
         this.app = app;
         this.pool = PoolManager.getInstance();
@@ -65,6 +76,11 @@ export class GameController {
         this.spawnRate = config.spawnRate || 1.0;
         this.rewardMultiplier = config.reward || 1.0;
         
+        const skins = {
+            'skin_heavy': 'assets/skin_heavy.png',
+            'skin_tuna': 'assets/skin_tuna.png',
+            'skin_lightning': 'assets/skin_lightning.png'
+        };
         this.initCannon();
         this.initInteraction();
         this.updateShopUI();
@@ -76,6 +92,15 @@ export class GameController {
                 console.error('Update Crash:', err.message);
             }
         });
+
+        // [核心优化]：开局即高潮：预先在屏幕内刷出 15-25 只鱼，避免开局等待两边进场
+        const preWarmCount = 15 + Math.floor(Math.random() * 10);
+        for (let i = 0; i < preWarmCount; i++) {
+            this.spawnFish(
+                undefined, 
+                200 + Math.random() * (SceneManager.width - 400) // X 轴随机分布在屏幕内
+            );
+        }
     }
 
     private initCannon(): void {
@@ -83,6 +108,24 @@ export class GameController {
         this.cannon.x = SceneManager.width / 2;
         this.cannon.y = SceneManager.height - 20;
         SceneManager.getLayer(Layers.UI).addChild(this.cannon);
+
+        // 添加“返回主页”按钮
+        const backBtn = new PIXI.Container();
+        backBtn.x = 20; backBtn.y = SceneManager.height - 60;
+        
+        const bg = new PIXI.Graphics().beginFill(0x333333, 0.8).lineStyle(2, 0xff0000).drawRoundedRect(0, 0, 120, 40, 5).endFill();
+        const txt = new PIXI.Text("退出猎杀", { fontSize: 18, fill: 0xffffff });
+        txt.anchor.set(0.5); txt.x = 60; txt.y = 20;
+        backBtn.addChild(bg, txt);
+        
+        backBtn.eventMode = 'static';
+        backBtn.cursor = 'pointer';
+        backBtn.on('pointerdown', () => {
+            if (confirm("确定要放弃本次猎杀并返回总部吗？")) {
+                location.reload(); // 最彻底的清理方式
+            }
+        });
+        SceneManager.getLayer(Layers.UI).addChild(backBtn);
     }
 
     private initInteraction(): void {
@@ -183,6 +226,7 @@ export class GameController {
             this.crystals -= cost;
             this.weaponLevels[id] = lvl + 1;
             this.updateShopUI();
+            AssetManager.playSound('upgrade'); 
             UIManager.showFloatingText(640, 360, `升级成功! LV.${lvl + 1}`, 0x00ff00);
             this.spawnShockwave(640, 360, 2.0);
         } else {
@@ -198,9 +242,24 @@ export class GameController {
 
         SceneManager.update(delta);
 
-        this.spawnTimer += delta * this.spawnRate;
-        if (this.spawnTimer > 15) {
-            this.spawnFish();
+        this.spawnTimer += delta;
+        // 动态波次间隔：根据难度调整，难度越高（spawnRate越大），出怪间隔越短
+        const baseInterval = 180 / this.spawnRate;
+        if (this.spawnTimer > (baseInterval + Math.random() * baseInterval)) { 
+            // 每一波出怪数量也随难度弹性变化
+            const maxSwarm = Math.min(6, Math.floor(1 + this.spawnRate * 1.5));
+            const swarmCount = Math.floor(Math.random() * maxSwarm) + 1;
+            
+            // 垂直分布：一波鱼往往出生在相近的高度，形成真实鱼群感
+            const baseSpawnY = 100 + Math.random() * (SceneManager.height - 300);
+            
+            for (let i = 0; i < swarmCount; i++) {
+                setTimeout(() => {
+                    if (this.fishes.length < 150) {
+                        this.spawnFish(baseSpawnY + (Math.random() - 0.5) * 80);
+                    }
+                }, i * (Math.random() * 300 + 150));
+            }
             this.spawnTimer = 0;
         }
 
@@ -214,14 +273,25 @@ export class GameController {
         this.updateEntities(this.lightnings, 'lightning', delta);
 
         this.checkCollisions();
+
+        // 连击计时器
+        if (this.comboTimer > 0) {
+            this.comboTimer -= delta;
+            if (this.comboTimer <= 0) {
+                this.comboCount = 0;
+                UIManager.updateCombo(0);
+            }
+        }
     }
 
     private handleAutoFire(delta: number): void {
         const id = this.unlockedWeapons[this.currentWeaponIndex];
         this.autoFireTimer += delta;
-        let interval = (id === 'gatling') ? 2 : (id === 'heavy' ? 18 : 6);
+        // 连锁闪电射速降低 50% (从 6 帧一发降至 12 帧一发)
+        let interval = (id === 'gatling') ? 2 : (id === 'heavy' ? 18 : (id === 'lightning' ? 12 : 6));
         
-        if (this.autoFireTimer > interval) {
+        const fireRateMult = (window as any).TalentFireRateMult || 1.0;
+        if (this.autoFireTimer > interval / fireRateMult) {
             const angle = this.cannon.getFireAngle();
             if (id === 'fish_tuna_mode') {
                 this.fire(this.cannon.x, this.cannon.y, angle);
@@ -241,6 +311,7 @@ export class GameController {
         if (!b) return;
         b.setType(id, lvl);
         b.fire(x, y, angle);
+        AssetManager.playSound('shoot'); // 播放开火音效
         SceneManager.getLayer(Layers.FX).addChild(b);
         this.bullets.push(b);
         this.spawnParticles(x + Math.cos(angle)*40, y + Math.sin(angle)*40, 2, 0xffffff, 2);
@@ -265,7 +336,9 @@ export class GameController {
                     b.kill();
                     const id = this.unlockedWeapons[this.currentWeaponIndex];
                     const lvl = this.weaponLevels[id] || 1;
-                    this.onHitEffect(id, b.x, b.y, lvl);
+                    
+                    // [核心优化]：将粒子效果和爆炸位置锁定在鱼的中心点 (f.x, f.y)，即便子弹刚触碰到边缘
+                    this.onHitEffect(id, f.x, f.y, lvl);
 
                     if (id === 'heavy') {
                         // 爆炸武器 AOE (使用平方检测)
@@ -275,15 +348,19 @@ export class GameController {
                             const tdx = target.x - b.x;
                             const tdy = target.y - b.y;
                             if (tdx*tdx + tdy*tdy < rangeSq) {
-                                this.applyDamage(target, b.damage * 0.5);
+                                const dmgMult = (window as any).TalentDmgMult || 1.0;
+                                this.applyDamage(target, b.damage * 0.5 * dmgMult);
                             }
                         }
                     } else if (id === 'lightning') {
-                        this.applyDamage(f, b.damage);
-                        // 增加 50% 连锁数量 (基础 3 变 5)
-                        this.triggerChainLightning(f, 5+lvl, b.damage*0.5); 
+                        AssetManager.playSound('lightning'); // 播放闪电音效
+                        const dmgMult = (window as any).TalentDmgMult || 1.0;
+                        this.applyDamage(f, b.damage * dmgMult);
+                        this.triggerChainLightning(f, 5+lvl, b.damage*0.5 * dmgMult); 
                     } else {
-                        this.applyDamage(f, b.damage);
+                        AssetManager.playSound('hit'); // 普通受击音效
+                        const dmgMult = (window as any).TalentDmgMult || 1.0;
+                        this.applyDamage(f, b.damage * dmgMult);
                     }
                     break;
                 }
@@ -297,11 +374,13 @@ export class GameController {
                 this.spawnParticles(x, y, 4, 0xffff00, 3);
                 break;
             case 'heavy':
+                AssetManager.playSound('explosion'); // 重炮爆炸音效
                 this.spawnParticles(x, y, 15, 0xffaa00, 5);
                 this.spawnShockwave(x, y, 1.0 + lvl*0.2);
                 SceneManager.shake(10, 150);
                 break;
-            case 'lightning': this.spawnParticles(x, y, 5, 0x00ffff, 4);
+            case 'lightning': 
+                this.spawnParticles(x, y, 5, 0x00ffff, 4);
                 break;
             default:
                 this.spawnParticles(x, y, 3, 0xcccccc, 1);
@@ -337,11 +416,40 @@ export class GameController {
     }
 
     private applyDamage(fish: Fish, dmg: number): void {
-        const isDead = fish.takeDamage(dmg);
+        // 1. 连击累加与收益
+        this.comboCount++;
+        this.comboTimer = 120; // 2秒冷却
+        const comboBonus = 1 + Math.min(2.0, this.comboCount * 0.01); // 最高 200% 连击伤害加成
+        UIManager.updateCombo(this.comboCount);
+
+        // 2. 暴击逻辑
+        const critChance = (window as any).TalentCritChance || 0;
+        let finalDmg = dmg * comboBonus; // 伤害受连击加成
+        let isCrit = false;
+        if (Math.random() < critChance) {
+            finalDmg *= 3.0; // 强化暴击倍率到 3 倍，让暴击更爽
+            isCrit = true;
+        }
+
+        // 3. 显示具体的血量伤害数字 (数值越大，弹出速度越快)
+        const dmgText = isCrit ? `CRIT ${Math.floor(finalDmg)}` : `${Math.floor(finalDmg)}`;
+        const dmgColor = isCrit ? 0xff3300 : (this.comboCount > 50 ? 0xffcc00 : 0xffffff);
+        UIManager.showFloatingText(fish.x, fish.y - fish.height/2, dmgText, dmgColor);
+
+        const isDead = fish.takeDamage(finalDmg);
         if (isDead) {
             const roll = Math.random();
-            const val = ((fish as any).isBoss ? 500 : (roll > 0.8 ? 50 : 10)) * 2 * this.rewardMultiplier;
+            const goldMult = (window as any).TalentGoldMult || 1.0;
+            // 连击越高，金币掉落越多 (额外 50% 连击金币红利)
+            const val = ((fish as any).isBoss ? 500 : (roll > 0.8 ? 50 : 10)) * 2 * this.rewardMultiplier * goldMult * (1 + this.comboCount * 0.005);
             this.crystals += val;
+            
+            // 重要：将本次获得的晶体按比例实时同步到永久金币中 (1:1 转换)
+            import('./SaveManager').then(({SaveManager}) => {
+                SaveManager.state.gold += Math.floor(val);
+                SaveManager.save();
+            });
+
             UIManager.updateHUD(this.crystals);
             
             this.spawnParticles(fish.x, fish.y, 20, 0xffffff, 8);
@@ -351,15 +459,18 @@ export class GameController {
         }
     }
 
-    private spawnFish(): void {
+    private spawnFish(preferredY?: number, preferredX?: number): void {
         const side = Math.random() > 0.5 ? 'left' : 'right';
-        const x = side === 'left' ? -200 : SceneManager.width + 200;
-        const y = 100 + Math.random() * (SceneManager.height - 300);
+        const x = preferredX !== undefined ? preferredX : (side === 'left' ? -200 : SceneManager.width + 200);
+        const y = preferredY !== undefined ? preferredY : 100 + Math.random() * (SceneManager.height - 300);
         
-        const isBoss = Math.random() < 0.03;
+        // BOSS 出现频率极大降低，并随难度系数微调
+        // 基础概率 0.5%，简单难度极难出，地狱难度才会频繁出
+        const bossThreshold = 0.005 * this.spawnRate;
+        const isBoss = Math.random() < bossThreshold;
+        
         const fish = this.pool.get('fish', () => new Fish());
         if (fish) {
-            // 将难度乘数注入 window 以便 Fish 实体访问，避开构造函数爆炸
             (window as any).DmgMultCurrent = this.hpMultiplier;
             fish.spawn(x, y, side, isBoss);
             SceneManager.getLayer(Layers.Game).addChild(fish);

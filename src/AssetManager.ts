@@ -2,114 +2,146 @@ import * as PIXI from 'pixi.js';
 
 /**
  * 资产管理器
- * 负责程序化生成游戏纹理及加载外部资源。
  */
 export class AssetManager {
     public static textures: { [key: string]: PIXI.Texture } = {};
+    private static audioCtx: AudioContext;
 
-    /**
-     * 初始化资产
-     * 加载外部图片并生成程序化纹理
-     */
     public static async init(renderer: PIXI.Renderer): Promise<void> {
-        console.log('Starting asset initialization... (using Robust Loader)');
+        console.log('Starting asset initialization...');
 
         try {
-            // 1. 基础程序化纹理
-            const bulletG = new PIXI.Graphics();
-            bulletG.beginFill(0xffffff).drawRect(0, 0, 20, 4).endFill();
-            bulletG.beginFill(0x00f0ff, 0.5).drawRect(-2, -1, 24, 6).endFill();
-            this.textures['bullet_laser'] = renderer.generateTexture(bulletG);
-
-            const plasmaG = new PIXI.Graphics();
-            plasmaG.beginFill(0x00ff00).drawCircle(10, 5, 10).endFill();
-            plasmaG.beginFill(0xffffff, 0.7).drawCircle(10, 5, 4).endFill();
-            this.textures['bullet_plasma'] = renderer.generateTexture(plasmaG);
-
-            const gatlingG = new PIXI.Graphics();
-            gatlingG.beginFill(0xffff00).drawRect(0, 0, 15, 6).endFill();
-            gatlingG.beginFill(0xffaa00, 0.8).drawRect(-2, -2, 19, 10).endFill();
-            this.textures['bullet_gatling'] = renderer.generateTexture(gatlingG);
-
-            const heavyG = new PIXI.Graphics();
-            heavyG.beginFill(0xff6600).drawRoundedRect(0, 0, 30, 20, 10).endFill();
-            heavyG.beginFill(0xffffff, 0.4).drawEllipse(15, 10, 12, 6).endFill();
-            this.textures['bullet_heavy'] = renderer.generateTexture(heavyG);
-
-            const lightningG = new PIXI.Graphics();
-            lightningG.beginFill(0x00ffff).drawCircle(8, 8, 8).endFill();
-            lightningG.lineStyle(2, 0xffffff).moveTo(0, 8).lineTo(16, 8).moveTo(8, 0).lineTo(8, 16);
-            this.textures['bullet_lightning'] = renderer.generateTexture(lightningG);
-
-            const coreG = new PIXI.Graphics();
-            coreG.beginFill(0x00ff00).drawPolygon([0, -15, 10, 0, 0, 15, -10, 0]).endFill();
-            this.textures['item_core'] = renderer.generateTexture(coreG);
-
-            // 自定义加载器
-            const loadImage = (src: string) => new Promise<PIXI.Texture>((resolve, reject) => {
-                const img = (window as any).wx ? (window as any).wx.createImage() : new Image();
-                img.onload = () => resolve(PIXI.Texture.from(img));
-                img.onerror = (e: any) => reject(new Error(`Failed to load: ${src}`));
-                img.src = src;
-            });
-
-            const getPath = (p: string) => (window as any).wx ? p : `/${p}`;
-
-            // 批量加载外部素材
-            const [
-                bgTex, cannonTex, bulletTex,
-                mapNormal, mapHard, mapLunatic,
-                tunaTex, anglerTex, sharkTex, jellyTex,
-                dragonTex, krakenTex,
-                gatlingCannonTex, heavyCannonTex
-            ] = await Promise.all([
-                loadImage(getPath('assets/bg_v2.png')).catch(() => null),
-                loadImage(getPath('assets/cannon_v3.png')).catch(() => null),
-                loadImage(getPath('assets/bullet_v2.png')).catch(() => null),
-                loadImage(getPath('assets/map_normal.png')).catch(() => null),
-                loadImage(getPath('assets/map_hard.png')).catch(() => null),
-                loadImage(getPath('assets/map_lunatic.png')).catch(() => null),
-                loadImage(getPath('assets/fish_v2.png')).catch(() => null),
-                loadImage(getPath('assets/fish_angler.png')).catch(() => null),
-                loadImage(getPath('assets/fish_shark.png')).catch(() => null),
-                loadImage(getPath('assets/fish_jelly.png')).catch(() => null),
-                loadImage(getPath('assets/mechanical_dragon_leviathan_v4_1775701420100_1775702245374.png')).catch(() => null),
-                loadImage(getPath('assets/mechanical_kraken_behemoth_v4_1775701420101_1775702270130.png')).catch(() => null),
-                loadImage(getPath('assets/gatling_cannon_top_v4_1775701550100_1775702336331_1775702378432.png')).catch(() => null),
-                loadImage(getPath('assets/heavy_railgun_top_v4_1775701550101_1775702336332_1775702401979.png')).catch(() => null)
-            ]);
-
-            if (bgTex) this.textures['bg_ocean'] = bgTex;
-            if (mapNormal) this.textures['map_normal'] = mapNormal;
-            if (mapHard) this.textures['map_hard'] = mapHard;
-            if (mapLunatic) this.textures['map_lunatic'] = mapLunatic;
-            if (cannonTex) this.textures['cannon_v3'] = cannonTex;
-            if (bulletTex) this.textures['bullet_v2'] = bulletTex;
-            if (tunaTex) this.textures['fish_tuna'] = tunaTex;
-            if (anglerTex) this.textures['fish_angler'] = anglerTex;
-            if (sharkTex) this.textures['fish_shark'] = sharkTex;
-            if (jellyTex) this.textures['fish_jelly'] = jellyTex;
-            if (dragonTex) this.textures['fish_dragon'] = dragonTex;
-            if (krakenTex) this.textures['fish_kraken'] = krakenTex;
-            
-            // 武器专属皮肤
-            if (gatlingCannonTex) this.textures['skin_gatling'] = gatlingCannonTex;
-            if (heavyCannonTex) this.textures['skin_heavy'] = heavyCannonTex;
-
-            // 兜底逻辑
-            if (!this.textures['bg_ocean']) {
-                const g = new PIXI.Graphics().beginFill(0x000033).drawRect(0, 0, 64, 64);
-                this.textures['bg_ocean'] = renderer.generateTexture(g);
+            if (!this.audioCtx) {
+                this.audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
             }
-            if (!this.textures['fish_tuna']) {
-                const g = new PIXI.Graphics().beginFill(0xff0000).drawCircle(0, 0, 20);
-                this.textures['fish_tuna'] = renderer.generateTexture(g);
-            }
+
+            this.generateTextures(renderer);
+            await this.loadExternalAssets();
 
             console.log('Asset Manager Initialized Successfully');
-
         } catch (error: any) {
             console.error('Critical Asset Loading Error:', error.message);
+        }
+    }
+
+    private static generateTextures(renderer: PIXI.Renderer): void {
+        // 程序化生成子弹
+        const bulletG = new PIXI.Graphics();
+        bulletG.beginFill(0xffffff).drawRect(0, 0, 20, 4).endFill();
+        bulletG.beginFill(0x00f0ff, 0.5).drawRect(-2, -1, 24, 6).endFill();
+        this.textures['bullet_laser'] = renderer.generateTexture(bulletG);
+
+        const plasmaG = new PIXI.Graphics();
+        plasmaG.beginFill(0x00ff00).drawCircle(10, 5, 10).endFill();
+        plasmaG.beginFill(0xffffff, 0.7).drawCircle(10, 5, 4).endFill();
+        this.textures['bullet_plasma'] = renderer.generateTexture(plasmaG);
+
+        const gatlingG = new PIXI.Graphics();
+        gatlingG.beginFill(0xffff00).drawRect(0, 0, 15, 6).endFill();
+        gatlingG.beginFill(0xffaa00, 0.8).drawRect(-2, -2, 19, 10).endFill();
+        this.textures['bullet_gatling'] = renderer.generateTexture(gatlingG);
+
+        const heavyG = new PIXI.Graphics();
+        heavyG.beginFill(0xff6600).drawRoundedRect(0, 0, 30, 20, 10).endFill();
+        heavyG.beginFill(0xffffff, 0.4).drawEllipse(15, 10, 12, 6).endFill();
+        this.textures['bullet_heavy'] = renderer.generateTexture(heavyG);
+
+        const lightningG = new PIXI.Graphics();
+        lightningG.beginFill(0x00ffff).drawCircle(8, 8, 8).endFill();
+        lightningG.lineStyle(2, 0xffffff).moveTo(0, 8).lineTo(16, 8).moveTo(8, 0).lineTo(8, 16);
+        this.textures['bullet_lightning'] = renderer.generateTexture(lightningG);
+
+        const coreG = new PIXI.Graphics();
+        coreG.beginFill(0x00ff00).drawPolygon([0, -15, 10, 0, 0, 15, -10, 0]).endFill();
+        this.textures['item_core'] = renderer.generateTexture(coreG);
+        
+        // 5. [核心优化] 程序化雷电炮台外观 (Lightning Inductor Cannon)
+        const lgtG = new PIXI.Graphics();
+        // 炮塔基座 (深灰色多边形金属感)
+        lgtG.beginFill(0x2c3e50).drawPolygon([-25, 40, 25, 40, 15, -10, -15, -10]).endFill();
+        // 电能量核心 (青色发光球体)
+        lgtG.beginFill(0x00ffff, 0.3).drawCircle(0, 5, 25).endFill(); // 外发光
+        lgtG.beginFill(0x00ffff).drawCircle(0, 5, 12).endFill();    // 核心
+        lgtG.beginFill(0xffffff, 0.8).drawCircle(0, 5, 5).endFill(); // 极高亮
+        // 磁悬浮支架 (细节增强)
+        lgtG.lineStyle(3, 0x95a5a6).moveTo(-15, -10).lineTo(-25, -25);
+        lgtG.lineStyle(3, 0x95a5a6).moveTo(15, -10).lineTo(25, -25);
+        lgtG.lineStyle(2, 0x00ffff).moveTo(-20, -20).lineTo(20, -20);
+        
+        this.textures['gen_lightning_skin'] = renderer.generateTexture(lgtG);
+    }
+
+    private static async loadExternalAssets(): Promise<void> {
+        const loadImage = (src: string) => new Promise<PIXI.Texture>((resolve, reject) => {
+            const img = (window as any).wx ? (window as any).wx.createImage() : new Image();
+            img.onload = () => resolve(PIXI.Texture.from(img));
+            img.onerror = (e: any) => reject(new Error(`Failed to load: ${src}`));
+            img.src = src;
+        });
+
+        const getPath = (p: string) => (window as any).wx ? p : `/${p}`;
+
+        const assetsToLoad = {
+            'bg_ocean': 'assets/bg_v2.png',
+            'cannon_v3': 'assets/cannon_v3.png',
+            'bullet_v2': 'assets/bullet_v2.png',
+            'map_normal': 'assets/map_normal.png',
+            'map_hard': 'assets/map_hard.png',
+            'map_lunatic': 'assets/map_lunatic.png',
+            'fish_tuna': 'assets/fish_v2.png',
+            'fish_angler': 'assets/fish_angler.png',
+            'fish_shark': 'assets/fish_shark.png',
+            'fish_jelly': 'assets/fish_jelly.png',
+            'fish_dragon': 'assets/fish_dragon_serpentine.png',
+            'fish_kraken': 'assets/fish_kraken.png',
+            'skin_gatling': 'assets/skin_gatling.png',
+            'skin_heavy': 'assets/skin_heavy.png',
+            'skin_tuna': 'assets/skin_tuna.png',
+            'skin_lightning': 'assets/skin_lightning.png'
+        };
+
+        for (const [key, path] of Object.entries(assetsToLoad)) {
+            const tex = await loadImage(getPath(path)).catch((err) => {
+                console.warn(`AssetManager: Skip ${key} due to load error:`, err.message);
+                return null;
+            });
+            if (tex) this.textures[key] = tex;
+        }
+    }
+
+    public static playSound(type: string): void {
+        if (!this.audioCtx) return;
+        if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+        const osc = this.audioCtx.createOscillator();
+        const gain = this.audioCtx.createGain();
+        osc.connect(gain); gain.connect(this.audioCtx.destination);
+        const now = this.audioCtx.currentTime;
+        switch(type) {
+            case 'shoot':
+                osc.type = 'triangle'; osc.frequency.setValueAtTime(440, now);
+                osc.frequency.exponentialRampToValueAtTime(110, now + 0.1);
+                gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now); osc.stop(now + 0.1); break;
+            case 'hit':
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, now);
+                osc.frequency.linearRampToValueAtTime(50, now + 0.05);
+                gain.gain.setValueAtTime(0.05, now); gain.gain.linearRampToValueAtTime(0.01, now + 0.05);
+                osc.start(now); osc.stop(now + 0.05); break;
+            case 'explosion':
+                osc.type = 'square'; osc.frequency.setValueAtTime(80, now);
+                osc.frequency.exponentialRampToValueAtTime(20, now + 0.3);
+                gain.gain.setValueAtTime(0.2, now); gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now); osc.stop(now + 0.3); break;
+            case 'lightning':
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(800, now);
+                osc.frequency.exponentialRampToValueAtTime(200, now + 0.15);
+                gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+                osc.start(now); osc.stop(now + 0.15); break;
+            case 'upgrade':
+                osc.type = 'sine'; osc.frequency.setValueAtTime(330, now);
+                osc.frequency.exponentialRampToValueAtTime(660, now + 0.2);
+                gain.gain.setValueAtTime(0.15, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now); osc.stop(now + 0.3); break;
         }
     }
 }

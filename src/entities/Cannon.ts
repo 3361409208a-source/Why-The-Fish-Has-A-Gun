@@ -30,22 +30,29 @@ export class Cannon extends PIXI.Sprite {
             'cannon_base': 'cannon_v3',
             'gatling': 'skin_gatling',
             'heavy': 'skin_heavy',
-            'lightning': 'cannon_v3', // 暂时复用基础款
-            'fish_tuna_mode': 'cannon_v3'
+            'lightning': 'skin_lightning',
+            'fish_tuna_mode': 'skin_tuna'
         };
 
         const textureKey = skinMap[type] || 'cannon_v3';
-        this.texture = AssetManager.textures[textureKey] || AssetManager.textures['cannon_v3'];
+        const newTex = AssetManager.textures[textureKey];
         
-        // V4 炮台采用正顶视角，旋转表现更稳定
-        const targetWidth = 140; 
+        if (newTex) {
+            this.texture = newTex;
+            console.log(`Switching cannon skin to: ${textureKey}`);
+        } else {
+            console.warn(`Asset missing: ${textureKey}, defaulting to cannon_v3`);
+            this.texture = AssetManager.textures['cannon_v3'];
+        }
+        
+        const targetWidth = 120; 
         const originalWidth = this.texture.width || 1024;
         const s = targetWidth / originalWidth;
         
         this.scale.set(s);
         this.rotation = 0; 
-        // 自动适配锚点：加特林和重炮重心通常在中心偏下
-        this.anchor.set(0.5, 0.65); 
+        // 将重心调至更靠下的基座中心
+        this.anchor.set(0.5, 0.75); 
         this.applyChromaKey();
     }
 
