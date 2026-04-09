@@ -84,19 +84,60 @@ export class GameController {
             this.cannon.lookAt(localPos.x, localPos.y);
         };
 
-        this.app.stage.on('pointerdown', onMove);
-        this.app.stage.on('pointermove', (e) => {
-            if (e.buttons > 0 || e.pointerType === 'touch') onMove(e);
+        let isDragging = false;
+
+        // 兼容原有的 PC/H5 Pixi 事件方案
+        this.app.stage.on('pointerdown', (e) => {
+            isDragging = true;
+            onMove(e);
         });
+
+        this.app.stage.on('pointerup', () => isDragging = false);
+        this.app.stage.on('pointerupoutside', () => isDragging = false);
+        this.app.stage.on('pointercancel', () => isDragging = false);
+
+        this.app.stage.on('pointermove', (e) => {
+            if (isDragging || e.buttons > 0 || e.pointerType === 'touch') {
+                onMove(e);
+            }
+        });
+
+        // 终极武器：如果是微信原生环境，强行接管底层的 Touch 事件，无视 Pixi 的事件过滤系统
+        if (typeof (window as any).wx !== 'undefined' && typeof (window as any).wx.onTouchMove === 'function') {
+            const wx = (window as any).wx;
+            wx.onTouchStart((res: any) => {
+                isDragging = true;
+                if (res.touches && res.touches.length > 0) {
+                    const touch = res.touches[0];
+                    // 屏幕逻辑像素坐标转换至 Pixi 舞台坐标
+                    const localPos = this.app.stage.toLocal(new PIXI.Point(touch.clientX, touch.clientY));
+                    this.cannon.lookAt(localPos.x, localPos.y);
+                }
+            });
+            wx.onTouchMove((res: any) => {
+                if (isDragging && res.touches && res.touches.length > 0) {
+                    const touch = res.touches[0];
+                    const localPos = this.app.stage.toLocal(new PIXI.Point(touch.clientX, touch.clientY));
+                    this.cannon.lookAt(localPos.x, localPos.y);
+                }
+            });
+            wx.onTouchEnd(() => isDragging = false);
+            wx.onTouchCancel(() => isDragging = false);
+        }
     }
 
     private updateShopUI(): void {
-        const weaponsData = this.weaponCatalog.map(w => ({
-            ...w,
-            unlocked: this.unlockedWeapons.includes(w.id),
-            active: this.unlockedWeapons[this.currentWeaponIndex] === w.id,
-            level: this.weaponLevels[w.id] || 1
-        }));
+        const weaponsData = this.weaponCatalog.map(w => {
+            const lvl = this.weaponLevels[w.id] || 1;
+            return {
+                ...w,
+                unlocked: this.unlockedWeapons.includes(w.id),
+                active: this.unlockedWeapons[this.currentWeaponIndex] === w.id,
+                level: lvl,
+                upgradeCost: 500 * Math.pow(2, lvl - 1),
+                isMax: lvl >= 5
+            };
+        });
 
         UIManager.setupShop(
             weaponsData, 

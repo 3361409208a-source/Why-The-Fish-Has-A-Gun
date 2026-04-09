@@ -6,12 +6,15 @@
   "scripts": {
     "dev": "vite",
     "build:h5": "vite build",
-    "build:wechat": "vite build --mode wechat",
+    "build:wechat": "vite build --mode wechat && copy game.json dist_wechat\\ && copy game.js dist_wechat\\ && copy weapp-adapter.js dist_wechat\\",
     "preview": "vite preview"
   },
   "devDependencies": {
+    "pixi.js": "^7.2.4",
     "typescript": "^5.0.0",
-    "vite": "^5.2.8",
-    "pixi.js": "^7.2.4"
+    "vite": "^5.2.8"
+  },
+  "dependencies": {
+    "@pixi/unsafe-eval": "^7.4.3"
   }
 }

@@ -49,82 +49,105 @@ export class UIManager {
      */
     public static setupShop(weapons: any[], onSelect: (id: string) => void, onUpgrade: (id: string) => void): void {
         this.shopContainer.removeChildren();
+        // 向左移动一点以便塞下更宽的菜单
+        this.shopContainer.x = SceneManager.width - 200;
         
         weapons.forEach((w, index) => {
             const btn = new PIXI.Container();
-            btn.y = index * 100; // 稍微拉开间距以容纳升级按钮
+            btn.y = index * 110; 
             
-            // 基础背景
+            // 基础背景放大
             const bg = new PIXI.Graphics();
-            bg.beginFill(w.unlocked ? 0x333333 : 0x111111, 0.9);
+            bg.beginFill(w.unlocked ? 0x222222 : 0x111111, 0.9);
             bg.lineStyle(2, w.active ? 0x00f0ff : 0x444444);
-            bg.drawRoundedRect(0, 0, 110, 80, 8);
+            bg.drawRoundedRect(0, 0, 180, 95, 8);
             bg.endFill();
             
-            const name = new PIXI.Text(w.name, { fontSize: 16, fill: 0xffffff, fontWeight: 'bold' });
+            const name = new PIXI.Text(w.name, { fontSize: 18, fill: 0xffffff, fontWeight: 'bold' });
             name.anchor.set(0.5);
-            name.x = 55;
-            name.y = 15;
+            name.x = 90;
+            name.y = 20;
             
-            const status = new PIXI.Text(w.unlocked ? `LV.${w.level}` : `${w.cost} 晶`, { 
-                fontSize: 14, 
+            const status = new PIXI.Text(w.unlocked ? `当前等级: LV.${w.level}` : `价格: ${w.cost} 晶体`, { 
+                fontSize: 16, 
                 fill: w.unlocked ? 0x00ff00 : 0xffcc00 
             });
             status.anchor.set(0.5);
-            status.x = 55;
-            status.y = 35;
+            status.x = 90;
+            status.y = 45;
 
             btn.addChild(bg, name, status);
 
             // 底部操作区
             if (w.unlocked) {
                 // 升级按钮
-                const upBtn = new PIXI.Graphics();
-                upBtn.beginFill(0x008800);
-                upBtn.drawRoundedRect(5, 50, 45, 25, 4);
-                upBtn.endFill();
-                const upTxt = new PIXI.Text("升级", { fontSize: 12, fill: 0xffffff });
-                upTxt.anchor.set(0.5);
-                upTxt.x = 27;
-                upTxt.y = 62;
+                const upBtn = new PIXI.Container();
+                upBtn.x = 10; upBtn.y = 65;
+                const upBg = new PIXI.Graphics();
+                upBg.beginFill(w.isMax ? 0x555555 : 0x008800);
+                upBg.drawRoundedRect(0, 0, 80, 25, 4);
+                upBg.endFill();
                 
-                upBtn.eventMode = 'static';
+                const upTxtText = w.isMax ? "已满级" : `升级(${w.upgradeCost})`;
+                const upTxt = new PIXI.Text(upTxtText, { fontSize: 12, fill: 0xffffff });
+                upTxt.anchor.set(0.5);
+                upTxt.x = 40; upTxt.y = 12.5;
+                
+                upBtn.addChild(upBg, upTxt);
+                upBtn.eventMode = w.isMax ? 'none' : 'static';
                 upBtn.cursor = 'pointer';
+                // 热区放大，防止点不中
+                upBtn.hitArea = new PIXI.Rectangle(-10, -10, 100, 45);
                 upBtn.on('pointerdown', (e) => {
                     e.stopPropagation();
-                    onUpgrade(w.id);
+                    if(!w.isMax) onUpgrade(w.id);
                 });
 
                 // 切换按钮
-                const useBtn = new PIXI.Graphics();
-                useBtn.beginFill(w.active ? 0x555555 : 0x0055ff);
-                useBtn.drawRoundedRect(55, 50, 45, 25, 4);
-                useBtn.endFill();
-                const useTxt = new PIXI.Text(w.active ? "就绪" : "切换", { fontSize: 12, fill: 0xffffff });
+                const useBtn = new PIXI.Container();
+                useBtn.x = 100; useBtn.y = 65;
+                const useBg = new PIXI.Graphics();
+                useBg.beginFill(w.active ? 0x555555 : 0x0055ff);
+                useBg.drawRoundedRect(0, 0, 70, 25, 4);
+                useBg.endFill();
+                
+                const useTxt = new PIXI.Text(w.active ? "使用中" : "装备", { fontSize: 14, fill: 0xffffff });
                 useTxt.anchor.set(0.5);
-                useTxt.x = 77;
-                useTxt.y = 62;
-
-                useBtn.eventMode = 'static';
+                useTxt.x = 35; useTxt.y = 12.5;
+                
+                useBtn.addChild(useBg, useTxt);
+                useBtn.eventMode = w.active ? 'none' : 'static';
                 useBtn.cursor = 'pointer';
-                useBtn.on('pointerdown', () => onSelect(w.id));
+                useBtn.hitArea = new PIXI.Rectangle(-10, -10, 90, 45);
+                useBtn.on('pointerdown', (e) => {
+                    e.stopPropagation();
+                    if(!w.active) onSelect(w.id);
+                });
 
-                btn.addChild(upBtn, upTxt, useBtn, useTxt);
+                btn.addChild(upBtn, useBtn);
             } else {
                 // 购买按钮 (全宽)
-                const buyBtn = new PIXI.Graphics();
-                buyBtn.beginFill(0xcc6600);
-                buyBtn.drawRoundedRect(5, 50, 100, 25, 4);
-                buyBtn.endFill();
-                const buyTxt = new PIXI.Text("解锁武器", { fontSize: 12, fill: 0xffffff });
+                const buyBtn = new PIXI.Container();
+                buyBtn.x = 10; buyBtn.y = 65;
+                const buyBg = new PIXI.Graphics();
+                buyBg.beginFill(0xcc6600);
+                buyBg.drawRoundedRect(0, 0, 160, 25, 4);
+                buyBg.endFill();
+                
+                const buyTxt = new PIXI.Text(`解锁武器`, { fontSize: 14, fill: 0xffffff, fontWeight: 'bold' });
                 buyTxt.anchor.set(0.5);
-                buyTxt.x = 55;
-                buyTxt.y = 62;
+                buyTxt.x = 80; buyTxt.y = 12.5;
 
+                buyBtn.addChild(buyBg, buyTxt);
                 buyBtn.eventMode = 'static';
                 buyBtn.cursor = 'pointer';
-                buyBtn.on('pointerdown', () => onSelect(w.id));
-                btn.addChild(buyBtn, buyTxt);
+                buyBtn.hitArea = new PIXI.Rectangle(-10, -10, 180, 45);
+                buyBtn.on('pointerdown', (e) => {
+                    e.stopPropagation();
+                    onSelect(w.id);
+                });
+                
+                btn.addChild(buyBtn);
             }
             
             this.shopContainer.addChild(btn);

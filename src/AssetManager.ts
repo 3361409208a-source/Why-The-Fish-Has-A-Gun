@@ -49,17 +49,38 @@ export class AssetManager {
             coreG.beginFill(0x00ff00).drawPolygon([0, -15, 10, 0, 0, 15, -10, 0]).endFill();
             this.textures['item_core'] = renderer.generateTexture(coreG);
 
-            // 2. 外部资源加载 (使用绝对路径确保 Vite 正确分发)
-            PIXI.Assets.add({ alias: 'bg', src: '/assets/bg.png' });
-            PIXI.Assets.add({ alias: 'tuna', src: '/assets/jqy.png' });
-            PIXI.Assets.add({ alias: 'base', src: '/assets/jgwuqi.png' });
+            // 自定义加载器，兼容浏览器和微信小游戏 (避开 PIXI.Assets 的 DOM 类型猜测和 fetch)
+            const loadImage = (src: string) => new Promise<PIXI.Texture>((resolve, reject) => {
+                const img = (window as any).wx ? (window as any).wx.createImage() : new Image();
+                img.onload = () => resolve(PIXI.Texture.from(img));
+                img.onerror = (e: any) => reject(new Error(`Failed to load: ${src}`));
+                img.src = src;
+            });
 
+            // 动态路径适配：微信小游戏使用相对路径，H5 必须使用绝对路径(/)才能映射到 public 目录
+            const getPath = (p: string) => (window as any).wx ? p : `/${p}`;
 
-            const assets = await PIXI.Assets.load(['bg', 'tuna', 'base']);
+            const bgTex = await loadImage(getPath('assets/bg.png')).catch(() => null);
+            const tunaTex = await loadImage(getPath('assets/jqy.png')).catch(() => null);
+            const baseTex = await loadImage(getPath('assets/jgwuqi.png')).catch(() => null);
 
-            this.textures['bg_ocean'] = assets.bg;
-            this.textures['fish_tuna'] = assets.tuna;
-            this.textures['cannon_base'] = assets.base;
+            if (bgTex) this.textures['bg_ocean'] = bgTex;
+            if (tunaTex) this.textures['fish_tuna'] = tunaTex;
+            if (baseTex) this.textures['cannon_base'] = baseTex;
+
+            // 补充兜底逻辑 (如果文件缺失)
+            if (!this.textures['bg_ocean']) {
+                const g = new PIXI.Graphics().beginFill(0x000033).drawRect(0, 0, 64, 64);
+                this.textures['bg_ocean'] = renderer.generateTexture(g);
+            }
+            if (!this.textures['fish_tuna']) {
+                const g = new PIXI.Graphics().beginFill(0xff0000).drawCircle(0, 0, 20);
+                this.textures['fish_tuna'] = renderer.generateTexture(g);
+            }
+            if (!this.textures['cannon_base']) {
+                const g = new PIXI.Graphics().beginFill(0x888888).drawRect(0, 0, 30, 30);
+                this.textures['cannon_base'] = renderer.generateTexture(g);
+            }
 
             // 6. 粒子基准纹理 (用于 ParticleContainer 渲染)
             const dot = new PIXI.Graphics();
