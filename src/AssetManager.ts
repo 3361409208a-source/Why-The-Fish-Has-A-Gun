@@ -86,13 +86,6 @@ export class AssetManager {
         acidG.beginFill(0x00ff00).drawPolygon([0, 0, 10, -5, 20, 0, 10, 5]).endFill();
         acidG.beginFill(0x00ff00, 0.5).drawCircle(10, 0, 12).endFill();
         this.textures['bullet_acid'] = renderer.generateTexture(acidG);
-
-        // --- 导航图标 (程序化生成) ---
-        const talentG = new PIXI.Graphics();
-        talentG.beginFill(0x00f0ff, 0.2).drawCircle(50, 50, 45).endFill();
-        talentG.lineStyle(4, 0x00f0ff).drawEllipse(50, 50, 35, 15).drawEllipse(50, 50, 15, 35).endFill();
-        talentG.beginFill(0xffffff).drawCircle(50, 50, 8).endFill();
-        this.textures['talent_icon'] = renderer.generateTexture(talentG);
     }
 
     private static async loadExternalAssets(onProgress?: (p: number) => void): Promise<void> {
@@ -119,9 +112,7 @@ export class AssetManager {
             // --- 永久商城武器 (金币购买) ---
             'skin_railgun': 'assets/skin_railgun.png',
             'skin_void': 'assets/skin_void.png',
-            'skin_acid': 'assets/skin_acid.png',
-            // --- 货币图标 (自定义生成) ---
-            'item_gold': 'C:/Users/18229/.gemini/antigravity/brain/e4a8b21d-e9ee-468e-8ac4-20c40969ba2f/sci_fi_gold_coin_credit_1775724027231.png'
+            'skin_acid': 'assets/skin_acid.png'
         };
 
         const total = Object.keys(assetsToLoad).length;

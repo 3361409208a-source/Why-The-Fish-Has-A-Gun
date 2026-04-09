@@ -21,8 +21,8 @@ export class SaveManager {
             critChance: 0
         },
         unlockedMaps: ['normal'],
-        weaponLevels: { 'cannon_base': 1 }, // 基础武器初始1级
-        goldUnlockedWeapons: ['cannon_base'] // 初始仅解锁基础激光
+        weaponLevels: {}, // 武器等级持久化存储
+        goldUnlockedWeapons: [] // 永久解锁的武器 (金币购买)
     };
 
     /**
@@ -52,9 +52,6 @@ export class SaveManager {
                 }
                 if (parsed.weaponLevels) {
                     Object.assign(this.state.weaponLevels, parsed.weaponLevels);
-                }
-                if (parsed.goldUnlockedWeapons) {
-                    this.state.goldUnlockedWeapons = parsed.goldUnlockedWeapons;
                 }
             } catch (e) {
                 console.error('Failed to parse save data', e);

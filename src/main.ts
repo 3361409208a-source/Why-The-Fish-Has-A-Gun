@@ -224,7 +224,7 @@ const initGame = async () => {
         
         // 启动新控制器 (传入完成后返回菜单的回调)
         activeController = new GameController(app, config, dialogue, () => {
-            UIManager.showMainMenu(onMapSelected);
+            UIManager.showMapSelection(onMapSelected);
             SceneManager.setBackground('bg_ocean'); 
         });
 
@@ -234,8 +234,8 @@ const initGame = async () => {
     // 初始设置背景
     SceneManager.setBackground('bg_ocean');
 
-    // 初始显示主菜单
-    UIManager.showMainMenu(onMapSelected);
+    // 初始显示地图选择
+    UIManager.showMapSelection(onMapSelected);
 
     console.log('Game Started with Global Upgrades');
 };
