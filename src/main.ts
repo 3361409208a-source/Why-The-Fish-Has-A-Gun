@@ -207,7 +207,7 @@ const initGame = async () => {
                 if (document.body.style) document.body.style.background = 'transparent';
                 const video = document.createElement('video');
                 video.id = 'bg-video';
-                video.src = 'assets/map_lunatic.mp4';
+                video.src = 'https://yu-1330371299.cos.ap-guangzhou.myqcloud.com/map_lunatic.mp4';
                 video.autoplay = true; video.loop = true; video.muted = true; video.playsInline = true;
                 Object.assign(video.style, {
                     position: 'fixed', top: '0', left: '0',

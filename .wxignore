@@ -1,0 +1,10 @@
+assets/
+*.png
+*.jpg
+*.mp4
+*.mp3
+!game.json
+!game.js
+!weapp-adapter.js
+!project.config.json
+!project.private.config.json

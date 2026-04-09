@@ -90,7 +90,14 @@ export class AssetManager {
 
     private static async loadExternalAssets(onProgress?: (p: number) => void): Promise<void> {
         const isWX = !!(window as any).wx;
-        const getPath = (p: string) => `./${p}`;
+        // 腾讯云 COS 对象存储基地址
+        const REMOTE_BASE = "https://yu-1330371299.cos.ap-guangzhou.myqcloud.com/";
+        
+        // 关键：将 assets/xxx.png 映射到 COS 根目录下的 xxx.png (剥离 assets/ 路径)
+        const getPath = (p: string) => {
+            const fileName = p.split('/').pop() || p;
+            return REMOTE_BASE + fileName;
+        };
 
         const assetsToLoad = {
             'bg_ocean': 'assets/bg_v2.png',

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build:h5": "vite build",
-    "build:wechat": "vite build --mode wechat && copy game.json dist_wechat\\ && copy game.js dist_wechat\\ && copy weapp-adapter.js dist_wechat\\",
+    "build:wechat": "vite build --mode wechat && copy game.json dist_wechat\\ && copy game.js dist_wechat\\ && copy weapp-adapter.js dist_wechat\\ && powershell -Command \"Remove-Item -Path dist_wechat/assets -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item -Path dist_wechat/*.png -Force -ErrorAction SilentlyContinue\"",
     "preview": "vite preview"
   },
   "devDependencies": {
