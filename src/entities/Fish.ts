@@ -1,5 +1,6 @@
 import * as PIXI from 'pixi.js';
 import { AssetManager } from '../AssetManager';
+import { SceneManager, Layers } from '../SceneManager';
 
 export class Fish extends PIXI.Sprite {
     public hp: number = 10;
@@ -22,6 +23,8 @@ export class Fish extends PIXI.Sprite {
 
     public isBoss: boolean = false;
     public isMinion: boolean = false; // 是否为死后爆出的小崽
+    private vx: number = 0;
+    private vy: number = 0;
     public bossKey: string = '';
     private fishType: 'jelly' | 'normal' = 'normal';
 
@@ -58,7 +61,8 @@ export class Fish extends PIXI.Sprite {
     public spawn(x: number, y: number, side: 'left' | 'right', isBoss: boolean = false, isMinion: boolean = false): void {
         this.x = x;
         this.y = y;
-        this.targetY = y;
+        // 目标高度：如果是上下边缘出生的，强制给一个屏幕内的目标点使其游入画面
+        this.targetY = (y < 0 || y > SceneManager.height) ? (200 + Math.random() * (SceneManager.height - 400)) : y;
         this.side = side;
         this.swayTimer = Math.random() * Math.PI * 2;
         this.hitTimer = 0;
@@ -137,10 +141,20 @@ export class Fish extends PIXI.Sprite {
         this.addChild(this.mesh);
         
         this.texture = PIXI.Texture.EMPTY;
+        // 计算初始速度向量：让鱼游向中心对角方向，实现真正的“对向游走”
+        let targetX = SceneManager.width / 2 + (Math.random() - 0.5) * 800;
+        let targetY = SceneManager.height / 2 + (Math.random() - 0.5) * 400;
+        
+        // 增加一点随机偏差，防止所有鱼都去同一个点
+        const angle = Math.atan2(targetY - this.y, targetX - this.x);
+        this.vx = Math.cos(angle) * this.originalSpeed;
+        this.vy = Math.sin(angle) * this.originalSpeed;
+
         this.hp *= mapMult;
         this.maxHp = this.hp;
         this.speed = this.originalSpeed;
-        this.scale.x = (this.side === 'left') ? -1 : 1;
+        this.verticalVelocity = 0;
+        this.scale.x = (this.vx > 0) ? -1 : 1;
         this.isActive = true;
     }
 
@@ -186,9 +200,10 @@ export class Fish extends PIXI.Sprite {
         }
 
         const vAccel = (this.targetY - this.y) * 0.05;
-        this.verticalVelocity = this.verticalVelocity * 0.9 + vAccel * 0.1;
+        this.verticalVelocity = this.verticalVelocity * 0.92 + vAccel * 0.08;
         this.y += this.verticalVelocity * delta;
-        this.y = Math.max(50, Math.min(670, this.y));
+        // 限制在画面内 (适配 1920x1080)
+        this.y = Math.max(-300, Math.min(SceneManager.height + 300, this.y));
 
         let swimTickRate = (this.isDashing || this.isMinion) ? 0.25 : 0.1; 
         if (this.fishType === 'jelly') swimTickRate = 0.05;
@@ -224,11 +239,14 @@ export class Fish extends PIXI.Sprite {
             if (this.hitTimer <= 0) Fish._sharedFilter.uniforms.uHitEffect = 0;
         }
 
-        this.x += (this.side === 'left' ? 1 : -1) * this.speed * delta + hitShakeX;
-        this.y += hitShakeY;
+        // 真正的 2D 对向位移
+        const speedRatio = this.speed / this.originalSpeed;
+        this.x += this.vx * speedRatio * delta + hitShakeX;
+        this.y += (this.vy * speedRatio + this.verticalVelocity) * delta + hitShakeY;
 
         const margin = 800;
-        if (this.x < -margin || this.x > 1280 + margin) this.kill();
+        if (this.x < -margin || this.x > SceneManager.width + margin || 
+            this.y < -margin || this.y > SceneManager.height + margin) this.kill();
     }
 
     public takeDamage(dmg: number): boolean {

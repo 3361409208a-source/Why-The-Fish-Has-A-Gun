@@ -38,19 +38,20 @@ export class UIManager {
         this.comboContainer.y = 100; // 稍微下移一点避开顶部HUD
         this.comboContainer.visible = false;
 
-        // 英文部分 (带有优雅的小幅动画)
-        this.comboLabel = new PIXI.Text('COMBO', {
-            fontFamily: 'Arial Black, Gadget, sans-serif',
-            fontSize: 22,
+        // × 符号（静止，放在数字左侧）
+        this.comboLabel = new PIXI.Text('×', {
+            fontFamily: 'Impact, Charcoal, sans-serif',
+            fontSize: 48,
             fill: 0x00f0ff,
             fontWeight: 'bold',
             stroke: '#000000',
-            strokeThickness: 3
+            strokeThickness: 4
         });
-        this.comboLabel.anchor.set(0.5, 0.5);
-        this.comboLabel.y = -45; 
+        this.comboLabel.anchor.set(1.0, 0.5); // 右对齐，紧贴数字左侧
+        this.comboLabel.x = -6;
+        this.comboLabel.y = 0;
 
-        this.comboText = new PIXI.Text('0', {
+        this.comboText = new PIXI.Text('1', {
             fontFamily: 'Impact, Charcoal, sans-serif',
             fontSize: 80,
             fill: [0xffffff, 0x00f0ff],
@@ -63,7 +64,8 @@ export class UIManager {
             dropShadowColor: '#000000',
             dropShadowDistance: 6
         });
-        this.comboText.anchor.set(0.5);
+        this.comboText.anchor.set(0, 0.5); // 左对齐，紧贴×右侧
+        this.comboText.x = 0;
         this.comboContainer.addChild(this.comboLabel, this.comboText);
         parent.addChild(this.comboContainer);
     }
@@ -276,10 +278,9 @@ export class UIManager {
         });
     }
 
-    public static showFloatingText(x: number, y: number, text: string, color: number = 0xffffff): void {
-        const isCrit = text.includes("CRIT");
+    public static showFloatingText(x: number, y: number, text: string, color: number = 0xffffff, isCrit: boolean = false): void {
         // [优化]：文字大小不再一致，增加随机性使其更有动感
-        const baseSize = isCrit ? 42 : (text.startsWith("+") ? 32 : 24 + Math.random() * 10);
+        const baseSize = isCrit ? 44 : (text.startsWith("+") ? 22 : 16 + Math.random() * 6);
         
         const t = new PIXI.Text(text, { 
             fontFamily: 'Verdana, Geneva, sans-serif',

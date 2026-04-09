@@ -463,35 +463,35 @@ export class GameController {
     }
 
     private applyDamage(fish: Fish, dmg: number): void {
-        // 1. 连击累加与收益
-        this.comboCount++;
-        this.comboTimer = 120; // 2秒冷却
-        const comboBonus = 1 + Math.min(2.0, this.comboCount * 0.01); // 最高 200% 连击伤害加成
-        UIManager.updateCombo(this.comboCount);
+        // 连击加成（击杀时才+1，见下方 isDead 判断）
+        const comboBonus = 1 + Math.min(2.0, this.comboCount * 0.05); // 每1连击+5%伤害，20连击即翻倍
 
-        // 2. 暴击逻辑
+        // 暴击逻辑
         const critChance = (window as any).TalentCritChance || 0;
-        let finalDmg = dmg * comboBonus; // 伤害受连击加成
+        let finalDmg = dmg * comboBonus;
         let isCrit = false;
         if (Math.random() < critChance) {
-            finalDmg *= 3.0; // 强化暴击倍率到 3 倍，让暴击更爽
+            finalDmg *= 3.0;
             isCrit = true;
         }
 
-        // 3. 显示具体的血量伤害数字 (数值越大，弹出速度越快)
-        const dmgText = isCrit ? `CRIT ${Math.floor(finalDmg)}` : `${Math.floor(finalDmg)}`;
-        const dmgColor = isCrit ? 0xff3300 : (this.comboCount > 50 ? 0xffcc00 : 0xffffff);
-        UIManager.showFloatingText(fish.x, fish.y - fish.height/2, dmgText, dmgColor);
+        // 显示伤害数字
+        const dmgText = `${Math.floor(finalDmg)}`;
+        const dmgColor = isCrit ? 0xff3300 : (this.comboCount > 20 ? 0xffcc00 : 0xffffff);
+        UIManager.showFloatingText(fish.x, fish.y - fish.height/2, dmgText, dmgColor, isCrit);
 
         const isDead = fish.takeDamage(finalDmg);
         if (isDead) {
+            // 击杀才触发连击+1
+            this.comboCount++;
+            this.comboTimer = 180; // 3秒内必须继续击杀，否则连击清零
+            UIManager.updateCombo(this.comboCount);
+
             const roll = Math.random();
             const goldMult = (window as any).TalentGoldMult || 1.0;
-            // 连击越高，金币掉落越多 (额外 50% 连击金币红利)
             const val = ((fish as any).isBoss ? 500 : (roll > 0.8 ? 50 : 10)) * 2 * this.rewardMultiplier * goldMult * (1 + this.comboCount * 0.005);
             this.crystals += val;
             
-            // 重要：将本次获得的晶体按比例实时同步到永久金币中 (1:1 转换)
             import('./SaveManager').then(({SaveManager}) => {
                 SaveManager.state.gold += Math.floor(val);
                 SaveManager.save();
@@ -507,12 +507,26 @@ export class GameController {
     }
 
     private spawnFish(preferredY?: number, preferredX?: number): void {
-        const side = Math.random() > 0.5 ? 'left' : 'right';
-        const x = preferredX !== undefined ? preferredX : (side === 'left' ? -200 : SceneManager.width + 200);
-        const y = preferredY !== undefined ? preferredY : 100 + Math.random() * (SceneManager.height - 300);
+        const sideRoll = Math.random();
+        let side: 'left' | 'right' = Math.random() > 0.5 ? 'left' : 'right';
+        let x: number, y: number;
+
+        if (preferredX !== undefined && preferredY !== undefined) {
+            x = preferredX; y = preferredY;
+        } else {
+            // 四周随机生成
+            if (sideRoll < 0.35) { // 35% 左侧
+                side = 'left'; x = -300; y = 100 + Math.random() * (SceneManager.height - 300);
+            } else if (sideRoll < 0.7) { // 35% 右侧
+                side = 'right'; x = SceneManager.width + 300; y = 100 + Math.random() * (SceneManager.height - 300);
+            } else if (sideRoll < 0.85) { // 15% 顶部
+                x = 100 + Math.random() * (SceneManager.width - 200); y = -200;
+            } else { // 15% 底部
+                x = 100 + Math.random() * (SceneManager.width - 200); y = SceneManager.height + 200;
+            }
+        }
         
-        // BOSS 出现频率极大降低，并随难度系数微调
-        // 基础概率 0.5%，简单难度极难出，地狱难度才会频繁出
+        // BOSS 概率
         const bossThreshold = 0.005 * this.spawnRate;
         const isBoss = Math.random() < bossThreshold;
         

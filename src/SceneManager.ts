@@ -15,8 +15,8 @@ export enum Layers {
  * 场景管理器：负责图层管理和屏幕适配
  */
 export class SceneManager {
-    public static width = 1280;
-    public static height = 720;
+    public static width = 1920;
+    public static height = 1080;
     private static app: PIXI.Application;
     private static layers: Map<string, PIXI.Container> = new Map();
     private static bgSprite: PIXI.TilingSprite | null = null;
