@@ -45,8 +45,7 @@ export class Fish extends PIXI.Sprite {
                 uniform float uHitEffect;
                 void main(void) {
                     vec4 color = texture2D(uSampler, vTextureCoord);
-                    float luma = dot(color.rgb, vec3(0.299, 0.587, 0.114));
-                    if (luma < 0.12 || (color.r > 0.96 && color.g > 0.96 && color.b > 0.96)) discard;
+                    if(color.a < 0.01) discard; // 仅保留基础透明度剔除
                     if(uHitEffect > 0.05) {
                         color.rgb *= (1.0 + uHitEffect * 1.5);
                         color.r += uHitEffect * 0.4;

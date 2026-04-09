@@ -30,8 +30,8 @@ export class Bullet extends PIXI.Sprite {
         
         this.texture = AssetManager.textures[texMap[type] || 'bullet_v2'];
         
-        // 针对带黑底的生成图应用滤色混合模式，去除黑边，保留发光
-        this.blendMode = PIXI.BLEND_MODES.SCREEN;
+        // 恢复正常混合模式
+        this.blendMode = PIXI.BLEND_MODES.NORMAL;
         
         // 基础数值
         let baseSpeed = 12;
@@ -47,11 +47,11 @@ export class Bullet extends PIXI.Sprite {
         const dmgTalent = (window as any).TalentDmgMult || 1.0;
         const speedTalent = (window as any).TalentSpeedMult || 1.0;
 
-        // 等级加成：每级增加 50% 伤害，20% 速度，15% 尺寸
+        // 等级加成：每级增加 80% 伤害，20% 速度，15% 尺寸
         const bonus = (level - 1);
-        this.speed = baseSpeed * (1 + bonus * 0.2) * speedTalent;
-        // 整体伤害
-        this.damage = baseDmg * (1 + bonus * 0.4) * 2 * dmgTalent;
+        // 核心伤害公式调整：强化初始威力至 20 左右，每级固定成长 10 点，而非整体倍率翻倍
+        // 这样可以确保“初始伤害增加”的同时，后期数值不会过于崩坏
+        this.damage = (baseDmg * 20 + bonus * 10) * dmgTalent;
         
         // 关键修复：由于生成图分辨率极高(1024)，必须强制缩放到合理的像素尺寸(30px)
         const targetSize = 30 * (1 + bonus * 0.15);
@@ -63,7 +63,8 @@ export class Bullet extends PIXI.Sprite {
         const offset = 60; // 枪口偏移量，确保子弹从前端射出
         this.x = x + Math.cos(angle) * offset;
         this.y = y + Math.sin(angle) * offset;
-        this.rotation = angle;
+        // 关键修复：由于美术素材子弹头朝上，旋转时需补偿 90 度以对齐飞行方向
+        this.rotation = angle + Math.PI / 2;
         this.vx = Math.cos(angle) * this.speed;
         this.vy = Math.sin(angle) * this.speed;
         this.isActive = true;

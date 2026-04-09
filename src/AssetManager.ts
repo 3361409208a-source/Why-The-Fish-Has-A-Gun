@@ -74,23 +74,36 @@ export class AssetManager {
     private static async loadExternalAssets(): Promise<void> {
         const loadImage = (src: string) => new Promise<PIXI.Texture>((resolve, reject) => {
             const isWX = !!(window as any).wx;
+            // 微信环境下创建原生图片对象
             const img = isWX ? (window as any).wx.createImage() : new Image();
+            
+            // 重要：在微信环境下注入 tagName 属性，并在 src 赋值前设置
+            if (isWX) {
+                (img as any).tagName = 'IMG';
+            }
+
             img.onload = () => {
-                // 微信环境最稳妥方案：手动创建 BaseTexture 并显式包装
                 try {
-                    const resource = new PIXI.BaseTexture(img);
-                    const tex = new PIXI.Texture(resource);
+                    // 强制使用 BaseTexture 包装，绕过资源自动检测
+                    const base = PIXI.BaseTexture.from(img, {
+                        resourceOptions: { autoLoad: true }
+                    });
+                    const tex = new PIXI.Texture(base);
                     resolve(tex);
                 } catch (e) {
-                    console.warn(`Manual texture creation failed for ${src}, falling back.`, e);
-                    resolve(PIXI.Texture.EMPTY);
+                    console.error(`PIXI Texture wrapping failed: ${src}`, e);
+                    resolve(PIXI.Texture.WHITE);
                 }
             };
-            img.onerror = (e: any) => reject(new Error(`Failed to load: ${src}`));
+            img.onerror = (err: any) => {
+                console.error(`Img load error: ${src}`, err);
+                reject(err);
+            };
             img.src = src;
         });
 
-        const getPath = (p: string) => (window as any).wx ? p : `/${p}`;
+        // 路径适配：微信环境下使用相对路径 './assets/...' 最为稳妥
+        const getPath = (p: string) => (window as any).wx ? `./${p}` : `/${p}`;
 
         const assetsToLoad = {
             'bg_ocean': 'assets/bg_v2.png',
