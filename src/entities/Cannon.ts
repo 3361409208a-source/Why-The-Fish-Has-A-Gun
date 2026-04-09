@@ -5,10 +5,8 @@ export class Cannon extends PIXI.Sprite {
     constructor() {
         super(AssetManager.textures['cannon_v3']);
         this.eventMode = 'static';
-        // 升级至正顶视角 V3
-        this.switchTexture('cannon_v3');
+        this.switchTexture('cannon_base');
     }
-
 
     private applyChromaKey(): void {
         const shaderFrag = `
@@ -27,24 +25,29 @@ export class Cannon extends PIXI.Sprite {
         this.filters = [new PIXI.Filter(undefined, shaderFrag)];
     }
 
+    public switchTexture(type: string): void {
+        const skinMap: {[key: string]: string} = {
+            'cannon_base': 'cannon_v3',
+            'gatling': 'skin_gatling',
+            'heavy': 'skin_heavy',
+            'lightning': 'cannon_v3', // 暂时复用基础款
+            'fish_tuna_mode': 'cannon_v3'
+        };
 
-    public switchTexture(key: string): void {
-        this.texture = AssetManager.textures['cannon_v3'] || AssetManager.textures['cannon_base'];
+        const textureKey = skinMap[type] || 'cannon_v3';
+        this.texture = AssetManager.textures[textureKey] || AssetManager.textures['cannon_v3'];
         
-        // V3 炮台采用正顶视角，旋转表现更稳定
-        const targetWidth = 160; 
+        // V4 炮台采用正顶视角，旋转表现更稳定
+        const targetWidth = 140; 
         const originalWidth = this.texture.width || 1024;
         const s = targetWidth / originalWidth;
         
         this.scale.set(s);
         this.rotation = 0; 
-        // V3 生成图的重心位于偏下的位置
-        this.anchor.set(0.5, 0.7); 
+        // 自动适配锚点：加特林和重炮重心通常在中心偏下
+        this.anchor.set(0.5, 0.65); 
         this.applyChromaKey();
     }
-
-
-
 
     /**
      * 使炮管旋转并指向目标点
@@ -64,8 +67,6 @@ export class Cannon extends PIXI.Sprite {
      * 获取子弹发射角度
      */
     public getFireAngle(): number {
-        // 子弹发射角度仍需对应逻辑上的 baseAngle
         return this.rotation - Math.PI / 2;
     }
-
 }

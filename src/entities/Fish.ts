@@ -12,7 +12,6 @@ export class Fish extends PIXI.Sprite {
     private dashTimer: number = 0;
     private originalSpeed: number = 2;
     private behavior: 'swim' | 'dash' | 'orbit' = 'swim';
-    private orbitAngle: number = 0;
     private baseScaleY: number = 1;
 
     public isBoss: boolean = false;
@@ -24,31 +23,35 @@ export class Fish extends PIXI.Sprite {
         this.anchor.set(0.5);
         
         if (!Fish._sharedFilter) {
-            Fish._sharedFilter = new PIXI.Filter(undefined, `
+            const shaderFrag = `
                 varying vec2 vTextureCoord;
                 uniform sampler2D uSampler;
                 uniform float uHitEffect;
-                uniform float uIsBoss;
 
-                void main() {
+                void main(void) {
                     vec4 color = texture2D(uSampler, vTextureCoord);
-                    // Luminance-based Discard (抠掉深色背景)
-                    float luma = dot(color.rgb, vec3(0.299, 0.587, 0.114));
-                    if(luma < 0.1) discard; 
                     
-                    // BOSS 红色发光滤镜
-                    if(uIsBoss > 0.5) {
-                        color.rgb += vec3(0.5, 0.0, 0.0) * (1.0 - color.a);
-                        color.r = mix(color.r, 1.0, 0.3);
+                    // 1. 动态背景剔除 (黑白两用)
+                    float luma = dot(color.rgb, vec3(0.299, 0.587, 0.114));
+                    if (luma < 0.12 || (color.r > 0.96 && color.g > 0.96 && color.b > 0.96)) {
+                        discard;
                     }
 
-                    // 受击白光
-                    color.rgb = mix(color.rgb, vec4(1.0).rgb, uHitEffect);
+                    // 2. 真实受击表现：不再是简单的变白，而是曝光增强 (Overexposure) + 红色高热 (Red Tint)
+                    if(uHitEffect > 0.05) {
+                        // 增加曝光，使本体发亮但保留轮廓
+                        color.rgb *= (1.0 + uHitEffect * 1.5);
+                        // 混入红色，模拟机械受损、电路短路的红光
+                        color.r += uHitEffect * 0.4;
+                        color.g -= uHitEffect * 0.2;
+                        color.b -= uHitEffect * 0.2;
+                    }
+                    
                     gl_FragColor = color;
                 }
-            `, {
-                uHitEffect: 0,
-                uIsBoss: 0
+            `;
+            Fish._sharedFilter = new PIXI.Filter(undefined, shaderFrag, {
+                uHitEffect: 0
             });
         }
         this.filters = [Fish._sharedFilter];
@@ -62,20 +65,30 @@ export class Fish extends PIXI.Sprite {
         this.hitTimer = 0;
         this.dashTimer = 0;
         this.behavior = 'swim';
-        this.orbitAngle = 0;
-        this.rotation = 0;
         this.isBoss = isBoss;
         
-        // 注入地图难度倍率 (从 GameController 动态注入)
-        const mapMult = (window as any).DmgMultCurrent || 1.0;
+        this.filters = [Fish._sharedFilter];
 
-        // 基础速度
+        const mapMult = (window as any).DmgMultCurrent || 1.0;
         this.originalSpeed = (Math.random() * 2 + 1) * 0.6;
 
         if (isBoss) {
-            this.texture = AssetManager.textures['fish_shark'] || AssetManager.textures['fish_tuna'];
-            this.hp = 100 * 40; // 这里的 40 是 BOSS 倍率
-            this.scale.set(5.0 * (150 / this.texture.width));
+            const bossType = Math.random();
+            if (bossType < 0.4) {
+                this.texture = AssetManager.textures['fish_dragon'] || AssetManager.textures['fish_shark'];
+                this.hp = 120 * 40;
+                this.originalSpeed *= 1.4;
+                this.scale.set(6.0 * (150 / this.texture.width));
+            } else if (bossType < 0.7) {
+                this.texture = AssetManager.textures['fish_kraken'] || AssetManager.textures['fish_shark'];
+                this.hp = 200 * 40;
+                this.originalSpeed *= 0.5;
+                this.scale.set(8.0 * (150 / this.texture.width));
+            } else {
+                this.texture = AssetManager.textures['fish_shark'];
+                this.hp = 100 * 40;
+                this.scale.set(5.0 * (150 / this.texture.width));
+            }
         } else {
             const speciesRand = Math.random();
             if (speciesRand < 0.3) {
@@ -100,7 +113,6 @@ export class Fish extends PIXI.Sprite {
             }
         }
 
-        // 应用地图难度倍率
         this.hp *= mapMult;
         this.maxHp = this.hp;
         this.speed = this.originalSpeed;
@@ -119,37 +131,39 @@ export class Fish extends PIXI.Sprite {
     public update(delta: number): void {
         if (!this.isActive) return;
 
-        // AI 行为逻辑
         this.swayTimer += delta * 0.05;
         const sway = Math.sin(this.swayTimer) * 2;
 
-        if (this.behavior === 'swim') {
-            this.x += (this.side === 'left' ? 1 : -1) * this.speed * delta;
-            this.y += sway * 0.5;
-            
-            if (Math.random() < 0.005) {
-                this.behavior = 'dash';
-                this.dashTimer = 30;
-            }
-        } else if (this.behavior === 'dash') {
-            this.x += (this.side === 'left' ? 3 : -3) * this.speed * delta;
-            this.dashTimer -= delta;
-            if (this.dashTimer <= 0) this.behavior = 'swim';
-        }
-
-        // 呼吸感缩放
-        this.scale.y = this.baseScaleY + Math.sin(this.swayTimer) * 0.05;
-
-        // 受击闪烁恢复
+        let hitShakeX = 0;
+        let hitShakeY = 0;
         if (this.hitTimer > 0) {
             this.hitTimer -= delta;
+            
+            // 物理上的抖动（真实的受击振幅）
+            hitShakeX = (Math.random() - 0.5) * 12;
+            hitShakeY = (Math.random() - 0.5) * 12;
+            
+            const pulse = 1 + Math.sin(this.hitTimer * 0.8) * 0.2;
+            this.scale.y = this.baseScaleY * pulse;
+
+            // 注意：更新 uniform 以表现渐变的着色器效果
+            Fish._sharedFilter.uniforms.uHitEffect = this.hitTimer / 15;
+            
             if (this.hitTimer <= 0) {
-                this.filters = [Fish._sharedFilter];
+                this.scale.y = this.baseScaleY;
                 Fish._sharedFilter.uniforms.uHitEffect = 0;
             }
         }
 
-        // 边界检查
+        if (this.behavior === 'swim') {
+            this.x += (this.side === 'left' ? 1 : -1) * this.speed * delta + hitShakeX;
+            this.y += sway * 0.5 + hitShakeY;
+        }
+
+        if (this.hitTimer <= 0) {
+            this.scale.y = this.baseScaleY + Math.sin(this.swayTimer) * 0.05;
+        }
+
         if (this.x < -300 || this.x > 1580 || this.y < -300 || this.y > 1020) {
             this.kill();
         }
@@ -157,10 +171,7 @@ export class Fish extends PIXI.Sprite {
 
     public takeDamage(dmg: number): boolean {
         this.hp -= dmg;
-        this.hitTimer = 5;
-        Fish._sharedFilter.uniforms.uHitEffect = 0.8;
-        Fish._sharedFilter.uniforms.uIsBoss = this.isBoss ? 1.0 : 0.0;
-        
+        this.hitTimer = 15; 
         if (this.hp <= 0) {
             this.kill();
             return true;

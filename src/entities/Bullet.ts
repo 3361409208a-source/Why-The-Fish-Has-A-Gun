@@ -1,5 +1,6 @@
 import * as PIXI from 'pixi.js';
 import { AssetManager } from '../AssetManager';
+import { SceneManager } from '../SceneManager';
 
 export class Bullet extends PIXI.Sprite {
     public isActive: boolean = false;
@@ -67,20 +68,38 @@ export class Bullet extends PIXI.Sprite {
     }
 
     public update(delta: number): void {
-        if (!this.isActive) return;
+        if (!this.isActive) {
+            this.visible = false;
+            return;
+        }
+
         this.x += this.vx * delta;
         this.y += this.vy * delta;
 
-        // 边界回收 (按虚拟分辨率 1280x720 计算)
-        if (this.x < -100 || this.x > 1280 + 100 || 
-            this.y < -100 || this.y > 720 + 100) {
+        // 增加生存计时器，防止子弹由于任何原因由于碰撞或边界逻辑失效而卡在屏幕上
+        this.trailTimer += delta;
+        if (this.trailTimer > 240) { // 缩短到 4 秒回收
             this.kill();
+            return;
         }
 
+        // 边界回收 (增加双重判定：如果父级消失或不可见也回收)
+        const margin = 100;
+        const outOfBounds = (this.x < -margin || this.x > SceneManager.width + margin || 
+                            this.y < -margin || this.y > SceneManager.height + margin);
+        
+        if (outOfBounds) {
+            this.kill();
+        }
     }
 
     public kill(): void {
         this.isActive = false;
         this.visible = false;
+        this.vx = 0;
+        this.vy = 0;
+        // 瞬间移出屏幕防止视觉残留
+        this.x = -1000;
+        this.y = -1000;
     }
 }

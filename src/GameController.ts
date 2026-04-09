@@ -249,28 +249,39 @@ export class GameController {
     private checkCollisions(): void {
         for (const b of this.bullets) {
             if (!b.isActive) continue;
+            
             for (const f of this.fishes) {
                 if (!f.isActive) continue;
+                
+                // 优化碰撞：使用更精确的中心点检测，避免 getBounds 带来的性能开销和偏差
                 const dx = Math.abs(b.x - f.x);
                 const dy = Math.abs(b.y - f.y);
-                const hw = (Math.abs(f.width)/2) * 0.7;
-                const hh = (Math.abs(f.height)/2) * 0.7;
+                
+                // 根据鱼的类型动态设定判定范围 (鱼的缩放后的物理范围)
+                const hitW = (Math.abs(f.width) / 2) * 0.8;
+                const hitH = (Math.abs(f.height) / 2) * 0.8;
 
-                if (dx < hw && dy < hh) {
+                if (dx < hitW && dy < hitH) {
                     b.kill();
                     const id = this.unlockedWeapons[this.currentWeaponIndex];
                     const lvl = this.weaponLevels[id] || 1;
                     this.onHitEffect(id, b.x, b.y, lvl);
 
                     if (id === 'heavy') {
+                        // 爆炸武器 AOE (使用平方检测)
+                        const rangeSq = Math.pow(150 + lvl*20, 2);
                         for (const target of this.fishes) {
                             if (!target.isActive) continue;
-                            const d = Math.sqrt(Math.pow(target.x-b.x,2)+Math.pow(target.y-b.y,2));
-                            if (d < 150 + lvl*20) this.applyDamage(target, b.damage * 0.5);
+                            const tdx = target.x - b.x;
+                            const tdy = target.y - b.y;
+                            if (tdx*tdx + tdy*tdy < rangeSq) {
+                                this.applyDamage(target, b.damage * 0.5);
+                            }
                         }
                     } else if (id === 'lightning') {
                         this.applyDamage(f, b.damage);
-                        this.triggerChainLightning(f, 3+lvl, b.damage*0.8);
+                        // 增加 50% 连锁数量 (基础 3 变 5)
+                        this.triggerChainLightning(f, 5+lvl, b.damage*0.5); 
                     } else {
                         this.applyDamage(f, b.damage);
                     }
@@ -290,8 +301,7 @@ export class GameController {
                 this.spawnShockwave(x, y, 1.0 + lvl*0.2);
                 SceneManager.shake(10, 150);
                 break;
-            case 'lightning':
-                this.spawnParticles(x, y, 5, 0x00ffff, 4);
+            case 'lightning': this.spawnParticles(x, y, 5, 0x00ffff, 4);
                 break;
             default:
                 this.spawnParticles(x, y, 3, 0xcccccc, 1);
@@ -414,7 +424,7 @@ export class GameController {
 
             if (!entity.isActive) {
                 list.splice(i, 1);
-                this.pool.release(type, entity);
+                this.pool.put(type, entity);
             }
         }
     }

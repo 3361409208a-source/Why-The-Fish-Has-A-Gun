@@ -28,14 +28,11 @@ export class SceneManager {
     public static init(app: PIXI.Application): void {
         this.app = app;
         
-        // 1. 背景层 (普通 Container)
-        this.createLayer(Layers.Background);
+        // 1. 明确图层创建顺序，按从下到上的顺序添加到 stage
+        this.createLayer(Layers.Background); // Index 0 (最底层)
+        this.createLayer(Layers.Game);       // Index 1
         
-        // 2. 游戏层 (包含鱼和动态实体)
-        this.createLayer(Layers.Game);
-        
-        // 3. 特效加速层 (Pixi v7 ParticleContainer)
-        // 开启所有的加速属性以支持子弹和粒子的渲染需求
+        // 2. 特效加速层 (ParticleContainer)
         const fxLayer = new PIXI.ParticleContainer(15000, {
             vertices: true,
             position: true,
@@ -46,10 +43,10 @@ export class SceneManager {
             alpha: true
         });
         this.layers.set(Layers.FX, fxLayer);
-        app.stage.addChild(fxLayer);
+        app.stage.addChild(fxLayer);          // Index 2
         
-        // 4. UI 层
-        this.createLayer(Layers.UI);
+        // 3. UI 层
+        this.createLayer(Layers.UI);         // Index 3 (最顶层)
 
         this.applyResize();
         window.addEventListener('resize', () => this.applyResize());
