@@ -121,7 +121,7 @@ const initGame = async () => {
     const barWidth = 600;
     const barFrame = new PIXI.Graphics().lineStyle(2, 0x00f0ff, 0.5).drawRoundedRect(960 - barWidth/2, 600, barWidth, 20, 10);
     const progressBar = new PIXI.Graphics();
-    const loadText = new PIXI.Text('正在连接深海潜行系统...', {
+    const loadText = new PIXI.Text('正在检测海域异常状态...', {
         fontFamily: 'Verdana', fontSize: 24, fill: 0x00f0ff, fontWeight: 'bold'
     });
     loadText.anchor.set(0.5); loadText.x = 960; loadText.y = 550;
@@ -150,96 +150,92 @@ const initGame = async () => {
 
     let activeController: GameController | null = null;
 
-    // 初始主页背景
-    const setMenuBg = () => {
-        SceneManager.getLayer(Layers.Background).removeChildren();
-        const bgTex = AssetManager.textures['bg_ocean'] || PIXI.Texture.WHITE;
-        const bg = new PIXI.Sprite(bgTex);
-        SceneManager.getLayer(Layers.Background).addChild(bg);
-        SceneManager.setBackground(bg, false);
-    };
+    // 统一的地图切入逻辑（包含剧情对话）
+    const onMapSelected = async (config: any) => {
+        // 先切换对应海域的背景
+        SceneManager.setBackground(config.tex || 'bg_ocean');
 
-    // 选图后的核心启动逻辑
-    const onMapSelected = (config: any) => {
-        // 先销毁旧控制器和清理旧环境
-        if (activeController) {
-            activeController.destroy();
-            activeController = null;
+        // 收集对应地图的剧情对话
+        let dialogue: any[] = [];
+        if (config.id === 'normal') {
+            dialogue = [
+                { speaker: '深度指挥部', text: '已到达外围海域“孢子温床”，开始环境扫描。', avatar: 'cannon_v3', side: 'left' },
+                { speaker: '驾驶员', text: '收到。这里的异常波动还算稳定。', avatar: 'skin_tuna', side: 'right' },
+                { speaker: '深海安康鱼', text: '……闪烁的光……是食物吗？', avatar: 'fish_angler', side: 'left' },
+                { speaker: '驾驶员', text: '那可不是什么好吃的。那是等离子光束！', avatar: 'skin_tuna', side: 'right' },
+                { speaker: '深度指挥部', text: '准备战斗，清理该区域。', avatar: 'cannon_v3', side: 'left' }
+            ];
+        } else if (config.id === 'hard') {
+            dialogue = [
+                { speaker: '驾驶员', text: '这片海域的辐射值太高了，雷达几乎完全失效。', avatar: 'skin_gatling', side: 'right' },
+                { speaker: '机械巨鲨', text: '鲜活的意志……多久没闻到这种味道了。', avatar: 'fish_shark', side: 'left' },
+                { speaker: '驾驶员', text: '别在那儿装神弄鬼。我知道你就在废船残骸后面！', avatar: 'skin_gatling', side: 'right' },
+                { speaker: '机械巨鲨', text: '哈哈哈哈！你的愤怒只会加速你的腐烂，小虫子。', avatar: 'fish_shark', side: 'left' },
+                { speaker: '驾驶员', text: '加特林预热完毕。让我看看你的钢板有多厚！', avatar: 'skin_gatling', side: 'right' },
+                { speaker: '机械巨鲨', text: '那就来吧……在死寂中痛苦挣扎吧！', avatar: 'fish_shark', side: 'left' }
+            ];
+        } else if (config.id === 'lunatic') {
+            dialogue = [
+                { speaker: '神秘信号', text: '警告：核心温度超过临界值。这里不适合任何生命形式。', avatar: 'skin_heavy', side: 'right' },
+                { speaker: '机械鳞龙', text: '……谁在唤醒核心的沉眠？', avatar: 'fish_dragon', side: 'left' },
+                { speaker: '驾驶员', text: '这声音……比传闻中还要让人不舒服。', avatar: 'skin_heavy', side: 'right' },
+                { speaker: '机械鳞龙', text: '你身上的金属……闻起来有英雄的腐臭味。', avatar: 'fish_dragon', side: 'left' },
+                { speaker: '驾驶员', text: '少废话。既然你还没死透，那我就再送你一程！', avatar: 'skin_heavy', side: 'right' },
+                { speaker: '机械鳞龙', text: '毁灭是永恒的恩赐！在余烬中化为虚无吧！', avatar: 'fish_dragon', side: 'left' },
+                { speaker: '深度指挥部', text: '各单位注意：主炮进入超负荷模式，全面开火！', avatar: 'cannon_v3', side: 'right' }
+            ];
         }
 
-        syncTalents();
+        // 销毁旧控制器
+        // 收集对话完毕，销毁旧控制器
+        if (activeController) activeController.destroy();
         
         // 清理旧的视频背景
         if (typeof document !== 'undefined' && typeof document.getElementById === 'function') {
             const oldVideo = document.getElementById('bg-video');
             if (oldVideo) oldVideo.remove();
         }
-        // 兼容移除微信视频
         if (isWX && (window as any)._wxVideo) {
             (window as any)._wxVideo.destroy();
             (window as any)._wxVideo = null;
         }
 
-        SceneManager.getLayer(Layers.Background).removeChildren();
-
-        if (config.tex === 'map_lunatic' && !isWX) {
+        if (config.id === 'lunatic' && !isWX) {
             // 视频背景逻辑 (仅在浏览器环境启用)
             if (typeof document !== 'undefined' && document.body) {
-                // 彻底透明化 PIXI 背景
                 app.renderer.background.alpha = 0;
                 if (document.body.style) document.body.style.background = 'transparent';
-                
                 const video = document.createElement('video');
                 video.id = 'bg-video';
                 video.src = 'assets/map_lunatic.mp4';
                 video.autoplay = true; video.loop = true; video.muted = true; video.playsInline = true;
-                
-                // 确保视频层级在最底下
                 Object.assign(video.style, {
                     position: 'fixed', top: '0', left: '0',
                     width: '100%', height: '100%', objectFit: 'cover', zIndex: '-1', 
                     backgroundColor: '#000'
                 });
                 document.body.insertBefore(video, document.body.firstChild);
-
-                if (canvas && canvas.style) {
-                    canvas.style.backgroundColor = 'transparent';
-                }
             }
         } else {
-            // 恢复普通地图：强制设为不透明
+            // 普通场景处理
             app.renderer.background.alpha = 1;
-            app.renderer.background.color = 0x00050a;
-
-            if (typeof document !== 'undefined' && document.body && document.body.style) {
-                document.body.style.background = '#00050a';
-            }
-            
-            if (canvas && canvas.style) {
-                canvas.style.position = '';
-                canvas.style.zIndex = '';
-                canvas.style.backgroundColor = '#00050a';
-            }
-            
-            // 动态选择背景图
-            const bgTex = AssetManager.textures[config.tex] || AssetManager.textures['bg_ocean'] || PIXI.Texture.WHITE;
-            const bg = new PIXI.Sprite(bgTex);
-            SceneManager.getLayer(Layers.Background).addChild(bg);
-            SceneManager.setBackground(bg, false);
+            SceneManager.setBackground(config.tex || 'bg_ocean');
         }
         
-        activeController = new GameController(app, config, () => {
-            // 当控制器内部触发“返回”时，在这里处理
-            if (activeController) activeController.destroy();
-            activeController = null;
-            setMenuBg();
-            UIManager.init(app);
-            UIManager.showMapSelection(onMapSelected);
+        // 启动新控制器 (传入完成后返回菜单的回调)
+        activeController = new GameController(app, config, dialogue, () => {
+            UIManager.showMainMenu(onMapSelected);
+            SceneManager.setBackground('bg_ocean'); 
         });
+
+        syncTalents();
     };
 
-    setMenuBg();
-    UIManager.showMapSelection(onMapSelected);
+    // 初始设置背景
+    SceneManager.setBackground('bg_ocean');
+
+    // 初始显示主菜单
+    UIManager.showMainMenu(onMapSelected);
 
     console.log('Game Started with Global Upgrades');
 };

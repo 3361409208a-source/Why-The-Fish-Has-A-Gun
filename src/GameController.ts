@@ -61,18 +61,22 @@ export class GameController {
         { id: 'fish_tuna_mode', name: '机械鱼模组', cost: 1000 },
         { id: 'gatling', name: '等离子加特林', cost: 3000 },
         { id: 'heavy', name: '重爆核能炮', cost: 8000 },
-        { id: 'lightning', name: '连锁闪电', cost: 15000 }
+        { id: 'lightning', name: '连锁闪电', cost: 15000 },
+        // --- 永久商城英雄武器 ---
+        { id: 'railgun', name: '热能轨道炮', cost: 50000 },
+        { id: 'void', name: '虚空投影仪', cost: 120000 },
+        { id: 'acid', name: '生化孢子炮', cost: 300000 }
     ];
 
     private comboCount: number = 0;
     private comboTimer: number = 0;
     private lastComboValue: number = 0;
 
+    private isPaused: boolean = false;
     private tickerFunc: (delta: number) => void;
-
     private onBack?: () => void;
 
-    constructor(app: PIXI.Application, config: any, onBack?: () => void) {
+    constructor(app: PIXI.Application, config: any, dialogueLines?: any[], onBack?: () => void) {
         this.app = app;
         this.onBack = onBack;
         this.pool = PoolManager.getInstance();
@@ -84,15 +88,13 @@ export class GameController {
         this.initCannon();
         this.initInteraction();
 
-        // 绑定更新函数以便后续移除
+        // 绑定更新函数
         this.tickerFunc = (delta: number) => {
+            if (this.isPaused) return; // 关键：剧情期间锁定整个逻辑引擎
             try {
                 this.update(delta);
             } catch (err: any) {
-                if (err.message.includes('Resource')) {
-                    // 屏蔽特定环境下的资源检测报错，防止刷屏
-                    return;
-                }
+                if (err.message.includes('Resource')) return;
                 console.error('Update Crash:', err.message);
             }
         };
@@ -104,7 +106,21 @@ export class GameController {
         }
         this.updateShopUI();
         
-        // 预热鱼群
+        // 如果有剧情，先进入强制暂停模式
+        if (dialogueLines && dialogueLines.length > 0) {
+            this.isPaused = true;
+            
+            UIManager.showDialogue(dialogueLines).then(() => {
+                this.isPaused = false;
+                // 剧情结束后再预热出怪
+                this.preWarm();
+            });
+        } else {
+            this.preWarm();
+        }
+    }
+
+    private preWarm(): void {
         const preWarmCount = 15 + Math.floor(Math.random() * 10);
         for (let i = 0; i < preWarmCount; i++) {
             this.spawnFish(undefined, 200 + Math.random() * (SceneManager.width - 400));
@@ -181,6 +197,7 @@ export class GameController {
         this.app.stage.hitArea = new PIXI.Rectangle(-1000, -1000, 3000, 3000); 
 
         const onMove = (e: PIXI.FederatedPointerEvent) => {
+            if (this.isPaused) return; // 剧情期间禁止旋转和操作
             const localPos = e.getLocalPosition(this.app.stage);
             this.cannon.lookAt(localPos.x, localPos.y);
         };
@@ -188,6 +205,7 @@ export class GameController {
         let isDragging = false;
 
         this.app.stage.on('pointerdown', (e) => {
+            if (this.isPaused) return;
             isDragging = true;
             onMove(e);
         });
@@ -197,6 +215,7 @@ export class GameController {
         this.app.stage.on('pointercancel', () => isDragging = false);
 
         this.app.stage.on('pointermove', (e) => {
+            if (this.isPaused) return;
             if (isDragging || e.buttons > 0 || e.pointerType === 'touch') {
                 onMove(e);
             }
@@ -205,6 +224,7 @@ export class GameController {
         if (typeof (window as any).wx !== 'undefined' && typeof (window as any).wx.onTouchMove === 'function') {
             const wx = (window as any).wx;
             wx.onTouchStart((res: any) => {
+                if (this.isPaused) return;
                 isDragging = true;
                 if (res.touches && res.touches.length > 0) {
                     const touch = res.touches[0];
@@ -213,6 +233,7 @@ export class GameController {
                 }
             });
             wx.onTouchMove((res: any) => {
+                if (this.isPaused) return;
                 if (isDragging && res.touches && res.touches.length > 0) {
                     const touch = res.touches[0];
                     const localPos = this.app.stage.toLocal(new PIXI.Point(touch.clientX, touch.clientY));
@@ -225,7 +246,13 @@ export class GameController {
     }
 
     private updateShopUI(): void {
-        const weaponsData = this.weaponCatalog.map(w => {
+        const goldUnlocked = SaveManager.state.goldUnlockedWeapons || [];
+        // 过滤：基础武器 + 永久解锁的英雄武器
+        const filteredCatalog = this.weaponCatalog.filter(w => 
+            !['railgun', 'void', 'acid'].includes(w.id) || goldUnlocked.includes(w.id)
+        );
+
+        const weaponsData = filteredCatalog.map(w => {
             const lvl = this.weaponLevels[w.id] || 1;
             return {
                 ...w,
@@ -340,8 +367,13 @@ export class GameController {
     private handleAutoFire(delta: number): void {
         const id = this.unlockedWeapons[this.currentWeaponIndex];
         this.autoFireTimer += delta;
-        // 连锁闪电射速降低 50% (从 6 帧一发降至 12 帧一发)
-        let interval = (id === 'gatling') ? 2 : (id === 'heavy' ? 18 : (id === 'lightning' ? 12 : 6));
+        // 攻击速度平衡
+        let interval = (id === 'gatling') ? 2 : 
+                       (id === 'heavy' ? 18 : 
+                       (id === 'lightning' ? 24 : 
+                       (id === 'railgun' ? 36 : 
+                       (id === 'void' ? 60 : 
+                       (id === 'acid' ? 28 : 6)))));
         
         const fireRateMult = (window as any).TalentFireRateMult || 1.0;
         if (this.autoFireTimer > interval / fireRateMult) {

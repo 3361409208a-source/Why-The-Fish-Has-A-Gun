@@ -31,7 +31,10 @@ export class Cannon extends PIXI.Sprite {
             'gatling': 'skin_gatling',
             'heavy': 'skin_heavy',
             'lightning': 'skin_lightning',
-            'fish_tuna_mode': 'skin_tuna'
+            'fish_tuna_mode': 'skin_tuna',
+            'railgun': 'skin_railgun',
+            'void': 'skin_void',
+            'acid': 'skin_acid'
         };
 
         const textureKey = skinMap[type] || 'cannon_v3';
@@ -45,7 +48,7 @@ export class Cannon extends PIXI.Sprite {
             this.texture = AssetManager.textures['cannon_v3'];
         }
         
-        const targetWidth = 120; 
+        const targetWidth = 180; 
         const originalWidth = this.texture.width || 1024;
         const s = targetWidth / originalWidth;
         

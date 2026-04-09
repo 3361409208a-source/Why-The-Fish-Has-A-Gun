@@ -1,4 +1,5 @@
 import * as PIXI from 'pixi.js';
+import { AssetManager } from './AssetManager';
 
 /**
  * 场景图层定义
@@ -8,7 +9,8 @@ export enum Layers {
     Game = 'game',
     Bullet = 'bullet', // 子弹层：在鱼（Game）上方，特效（FX）下方
     FX = 'fx',
-    UI = 'ui'
+    UI = 'ui',
+    Story = 'story' // 最高层级：用于剧情对话，不被游戏UI干扰
 }
 
 /**
@@ -25,9 +27,30 @@ export class SceneManager {
     private static underwaterFilter: PIXI.Filter | null = null;
     private static filterTime: number = 0;
 
-    public static setBackground(sprite: PIXI.Sprite, isTiled: boolean = false): void {
-        this.bgSprite = sprite;
+    public static setBackground(source: PIXI.Sprite | string, isTiled: boolean = false): void {
+        const bgLayer = this.getLayer(Layers.Background);
+        
+        if (typeof source === 'string') {
+            // 关键修复：不要直接使用 PIXI.Texture.from，它在微信端会触发 Illegal constructor
+            // 使用已经预加载好的 AssetManager.textures
+            const tex = AssetManager.textures[source] || PIXI.Texture.WHITE;
+            if (!this.bgSprite) {
+                this.bgSprite = new PIXI.Sprite(tex);
+                bgLayer.addChild(this.bgSprite);
+            } else {
+                this.bgSprite.texture = tex;
+            }
+        } else {
+            this.bgSprite = source;
+            bgLayer.removeChildren();
+            bgLayer.addChild(this.bgSprite);
+        }
+        
         this.isTiled = isTiled;
+        this.bgSprite.visible = true; // 强制显示
+        this.bgSprite.alpha = 1;
+        
+        this.applyResize(); // 立即重新适配屏幕尺寸
         
         // 增加动态海底扭曲滤镜
         if (!this.underwaterFilter) {

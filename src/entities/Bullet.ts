@@ -25,7 +25,10 @@ export class Bullet extends PIXI.Sprite {
             'fish_tuna_mode': 'bullet_v2',
             'gatling': 'bullet_v2',
             'heavy': 'bullet_v2',
-            'lightning': 'bullet_v2'
+            'lightning': 'bullet_v2',
+            'railgun': 'bullet_railgun',
+            'void': 'bullet_void',
+            'acid': 'bullet_acid'
         };
         
         this.texture = AssetManager.textures[texMap[type] || 'bullet_v2'];
@@ -39,9 +42,12 @@ export class Bullet extends PIXI.Sprite {
         
         switch(type) {
             case 'fish_tuna_mode': baseSpeed = 10; baseDmg = 1.5; break;
-            case 'gatling': baseSpeed = 18; baseDmg = 1.2; break; // 恢复加特林的基础威力
+            case 'gatling': baseSpeed = 18; baseDmg = 1.2; break;
             case 'heavy': baseSpeed = 8; baseDmg = 12; break;
-            case 'lightning': baseSpeed = 25; baseDmg = 0.8; break; // 降低基础威力至 0.8
+            case 'lightning': baseSpeed = 25; baseDmg = 0.8; break;
+            case 'railgun': baseSpeed = 35; baseDmg = 50; break; // 极速，极大威力
+            case 'void': baseSpeed = 5; baseDmg = 80; break;    // 慢，毁天灭地威力
+            case 'acid': baseSpeed = 15; baseDmg = 40; break;   // 稳步推进
         }
 
         const dmgTalent = (window as any).TalentDmgMult || 1.0;
@@ -53,10 +59,14 @@ export class Bullet extends PIXI.Sprite {
         // 这样可以确保“初始伤害增加”的同时，后期数值不会过于崩坏
         this.damage = (baseDmg * 20 + bonus * 10) * dmgTalent;
         
-        // 关键修复：由于生成图分辨率极高(1024)，必须强制缩放到合理的像素尺寸(30px)
-        const targetSize = 30 * (1 + bonus * 0.15);
-        const s = targetSize / (this.texture.width || 1024);
+        // 关键修复：子弹尺寸增加 2 倍
+        let targetSize = 60 * (1 + bonus * 0.15);
+        if (type === 'void') targetSize *= 2.5; // 黑洞球特别大
+        
+        const originalWidth = (this.texture.width || 1024);
+        const s = targetSize / originalWidth;
         this.scale.set(s);
+        this.speed = baseSpeed * speedTalent * (1 + bonus * 0.2);
     }
 
     public fire(x: number, y: number, angle: number): void {

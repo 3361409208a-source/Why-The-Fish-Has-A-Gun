@@ -69,6 +69,30 @@ export class AssetManager {
         lgtG.lineStyle(2, 0x00ffff).moveTo(-20, -20).lineTo(20, -20);
         
         this.textures['gen_lightning_skin'] = renderer.generateTexture(lgtG);
+
+        // --- 英雄武器子弹 ---
+        const railG = new PIXI.Graphics();
+        railG.beginFill(0xffaa00).drawRect(0, 0, 40, 8).endFill();
+        railG.beginFill(0xffffff, 0.8).drawRect(5, 2, 30, 4).endFill();
+        this.textures['bullet_railgun'] = renderer.generateTexture(railG);
+
+        const voidG = new PIXI.Graphics();
+        voidG.beginFill(0xcc00ff, 0.4).drawCircle(15, 15, 15).endFill();
+        voidG.beginFill(0xff00ff).drawCircle(15, 15, 8).endFill();
+        voidG.beginFill(0xffffff, 0.8).drawCircle(15, 15, 4).endFill();
+        this.textures['bullet_void'] = renderer.generateTexture(voidG);
+
+        const acidG = new PIXI.Graphics();
+        acidG.beginFill(0x00ff00).drawPolygon([0, 0, 10, -5, 20, 0, 10, 5]).endFill();
+        acidG.beginFill(0x00ff00, 0.5).drawCircle(10, 0, 12).endFill();
+        this.textures['bullet_acid'] = renderer.generateTexture(acidG);
+
+        // --- 导航图标 (程序化生成) ---
+        const talentG = new PIXI.Graphics();
+        talentG.beginFill(0x00f0ff, 0.2).drawCircle(50, 50, 45).endFill();
+        talentG.lineStyle(4, 0x00f0ff).drawEllipse(50, 50, 35, 15).drawEllipse(50, 50, 15, 35).endFill();
+        talentG.beginFill(0xffffff).drawCircle(50, 50, 8).endFill();
+        this.textures['talent_icon'] = renderer.generateTexture(talentG);
     }
 
     private static async loadExternalAssets(onProgress?: (p: number) => void): Promise<void> {
@@ -91,7 +115,13 @@ export class AssetManager {
             'skin_gatling': 'assets/skin_gatling.png',
             'skin_heavy': 'assets/skin_heavy.png',
             'skin_tuna': 'assets/skin_tuna.png',
-            'skin_lightning': 'assets/skin_lightning.png'
+            'skin_lightning': 'assets/skin_lightning.png',
+            // --- 永久商城武器 (金币购买) ---
+            'skin_railgun': 'assets/skin_railgun.png',
+            'skin_void': 'assets/skin_void.png',
+            'skin_acid': 'assets/skin_acid.png',
+            // --- 货币图标 (自定义生成) ---
+            'item_gold': 'C:/Users/18229/.gemini/antigravity/brain/e4a8b21d-e9ee-468e-8ac4-20c40969ba2f/sci_fi_gold_coin_credit_1775724027231.png'
         };
 
         const total = Object.keys(assetsToLoad).length;

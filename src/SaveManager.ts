@@ -11,6 +11,7 @@ export class SaveManager {
         talents: { damage: number; fireRate: number; goldBonus: number; critChance: number; };
         unlockedMaps: string[];
         weaponLevels: { [id: string]: number };
+        goldUnlockedWeapons: string[];
     } = {
         gold: 1000,
         talents: {
@@ -20,7 +21,8 @@ export class SaveManager {
             critChance: 0
         },
         unlockedMaps: ['normal'],
-        weaponLevels: {} // 武器等级持久化存储
+        weaponLevels: { 'cannon_base': 1 }, // 基础武器初始1级
+        goldUnlockedWeapons: ['cannon_base'] // 初始仅解锁基础激光
     };
 
     /**
@@ -50,6 +52,9 @@ export class SaveManager {
                 }
                 if (parsed.weaponLevels) {
                     Object.assign(this.state.weaponLevels, parsed.weaponLevels);
+                }
+                if (parsed.goldUnlockedWeapons) {
+                    this.state.goldUnlockedWeapons = parsed.goldUnlockedWeapons;
                 }
             } catch (e) {
                 console.error('Failed to parse save data', e);
