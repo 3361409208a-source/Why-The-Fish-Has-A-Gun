@@ -6,15 +6,21 @@ export class SaveManager {
     private static SAVE_KEY = 'DeepSeaEmbers_SaveV1';
 
     // 存档结构
-    public static state = {
-        gold: 1000, // 永久金币 (只有在主页用于升级)
+    public static state: {
+        gold: number;
+        talents: { damage: number; fireRate: number; goldBonus: number; critChance: number; };
+        unlockedMaps: string[];
+        weaponLevels: { [id: string]: number };
+    } = {
+        gold: 1000,
         talents: {
-            damage: 0,      // 伤害加成层数
-            fireRate: 0,    // 射速加成层数
-            goldBonus: 0,   // 金币获取加成
-            critChance: 0   // 暴击几率
+            damage: 0,
+            fireRate: 0,
+            goldBonus: 0,
+            critChance: 0
         },
-        unlockedMaps: ['normal'] // 已解锁的海域
+        unlockedMaps: ['normal'],
+        weaponLevels: {} // 武器等级持久化存储
     };
 
     /**
@@ -24,7 +30,16 @@ export class SaveManager {
         const data = localStorage.getItem(this.SAVE_KEY);
         if (data) {
             try {
-                this.state = JSON.parse(data);
+                const parsed = JSON.parse(data);
+                // 深合并：保护新字段（如 weaponLevels）不被旧存档数据覆盖掉
+                this.state.gold = parsed.gold ?? this.state.gold;
+                this.state.unlockedMaps = parsed.unlockedMaps ?? this.state.unlockedMaps;
+                if (parsed.talents) {
+                    Object.assign(this.state.talents, parsed.talents);
+                }
+                if (parsed.weaponLevels) {
+                    Object.assign(this.state.weaponLevels, parsed.weaponLevels);
+                }
             } catch (e) {
                 console.error('Failed to parse save data', e);
             }

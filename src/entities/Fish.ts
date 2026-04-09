@@ -81,20 +81,24 @@ export class Fish extends PIXI.Sprite {
         let baseScale = 1.0;
 
         if (isBoss) {
+            // Boss HP 随机因子：0.1 ~ 1.0 倍，用平方根让低血量更容易出现
+            const hpRoll = 0.1 + Math.random() * 0.9;
             const bossType = Math.random();
             if (bossType < 0.4) {
                 this.bossKey = 'dragon';
                 tex = AssetManager.textures['fish_dragon'] || AssetManager.textures['fish_shark'];
-                this.hp = 120 * 40; this.originalSpeed = 1.1; baseScale = 1.5 * (500 / (tex.width || 1024));
+                this.hp = Math.floor(4800 * hpRoll); this.originalSpeed = 1.1; baseScale = 1.5 * (500 / (tex.width || 1024));
             } else if (bossType < 0.7) {
                 this.bossKey = 'kraken';
                 tex = AssetManager.textures['fish_kraken'] || AssetManager.textures['fish_shark'];
-                this.hp = 200 * 40; this.originalSpeed = 0.4; baseScale = 3.8 * (150 / tex.width);
+                this.hp = Math.floor(8000 * hpRoll); this.originalSpeed = 0.4; baseScale = 3.8 * (150 / tex.width);
             } else {
                 this.bossKey = 'shark';
                 tex = AssetManager.textures['fish_shark'];
-                this.hp = 100 * 40; this.originalSpeed = 0.6; baseScale = 3.2 * (150 / tex.width);
+                this.hp = Math.floor(4000 * hpRoll); this.originalSpeed = 0.6; baseScale = 3.2 * (150 / tex.width);
             }
+            // 血量越低速度越快（残血精英 boss 会更狡猾）
+            this.originalSpeed *= (1.0 + (1.0 - hpRoll) * 0.6);
         } else if (isMinion) {
             // 小崽子：体积只有原来的 1/4，血量极低
             this.bossKey = 'minion';
@@ -108,13 +112,13 @@ export class Fish extends PIXI.Sprite {
             this.bossKey = '';
             const speciesRand = Math.random();
             if (speciesRand < 0.3) {
-                tex = AssetManager.textures['fish_angler']; this.hp = 2;
+                tex = AssetManager.textures['fish_angler']; this.hp = 20;
                 this.originalSpeed = 1.2; baseScale = 0.6 * (100 / tex.width);
             } else if (speciesRand < 0.6) {
                 this.fishType = 'jelly'; tex = AssetManager.textures['fish_jelly']; 
-                this.hp = 5; this.originalSpeed = 0.4; baseScale = 1.0 * (100 / tex.width);
+                this.hp = 50; this.originalSpeed = 0.4; baseScale = 1.0 * (100 / tex.width);
             } else {
-                tex = AssetManager.textures['fish_tuna']; this.hp = 10;
+                tex = AssetManager.textures['fish_tuna']; this.hp = 100;
                 this.originalSpeed = 0.8; baseScale = 1.4 * (100 / tex.width);
             }
         }

@@ -7,7 +7,7 @@ import { NanoCore } from './entities/NanoCore';
 import { UIManager } from './UIManager';
 import { Cannon } from './entities/Cannon';
 import { AssetManager } from './AssetManager';
-
+import { SaveManager } from './SaveManager';
 import { Particle } from './entities/Particle';
 import { Shockwave } from './entities/Shockwave';
 import { Lightning } from './entities/Lightning';
@@ -83,6 +83,12 @@ export class GameController {
         };
         this.initCannon();
         this.initInteraction();
+
+        // [修复] 同步从存档读取武器等级，保证进入战场时等级与主页一致
+        const savedLevels = SaveManager.state.weaponLevels || {};
+        for (const id of Object.keys(this.weaponLevels)) {
+            if (savedLevels[id]) this.weaponLevels[id] = savedLevels[id];
+        }
         this.updateShopUI();
         
         app.ticker.add((delta: number) => {
@@ -109,21 +115,29 @@ export class GameController {
         this.cannon.y = SceneManager.height - 20;
         SceneManager.getLayer(Layers.UI).addChild(this.cannon);
 
-        // 添加“返回主页”按钮
+        // 添加"返回主页"按钮（统一深海风格）
         const backBtn = new PIXI.Container();
-        backBtn.x = 20; backBtn.y = SceneManager.height - 60;
+        backBtn.x = 20; backBtn.y = SceneManager.height - 66;
         
-        const bg = new PIXI.Graphics().beginFill(0x333333, 0.8).lineStyle(2, 0xff0000).drawRoundedRect(0, 0, 120, 40, 5).endFill();
-        const txt = new PIXI.Text("退出猎杀", { fontSize: 18, fill: 0xffffff });
-        txt.anchor.set(0.5); txt.x = 60; txt.y = 20;
-        backBtn.addChild(bg, txt);
+        const btnBg = new PIXI.Graphics()
+            .beginFill(0x050e1a, 0.9)
+            .lineStyle(2, 0xff4444, 0.9)
+            .drawRoundedRect(0, 0, 130, 44, 10)
+            .endFill();
+        const btnTxt = new PIXI.Text("撤退返回", { 
+            fontFamily: 'Verdana', fontSize: 16, fill: 0xff8888, fontWeight: 'bold' 
+        });
+        btnTxt.anchor.set(0.5); btnTxt.x = 65; btnTxt.y = 22;
+        backBtn.addChild(btnBg, btnTxt);
         
         backBtn.eventMode = 'static';
         backBtn.cursor = 'pointer';
+        backBtn.on('pointerover', () => { btnBg.tint = 0xff6666; });
+        backBtn.on('pointerout', () => { btnBg.tint = 0xffffff; });
         backBtn.on('pointerdown', () => {
-            if (confirm("确定要放弃本次猎杀并返回总部吗？")) {
-                location.reload(); // 最彻底的清理方式
-            }
+            UIManager.showConfirm("确定要放弃本次猎杀并返回总部吗？", "⚠ 撤退确认").then(ok => {
+                if (ok) location.reload();
+            });
         });
         SceneManager.getLayer(Layers.UI).addChild(backBtn);
     }
@@ -225,6 +239,11 @@ export class GameController {
         if (this.crystals >= cost) {
             this.crystals -= cost;
             this.weaponLevels[id] = lvl + 1;
+            // [修复] 升级后同步到存档中
+            import('./SaveManager').then(({ SaveManager }) => {
+                SaveManager.state.weaponLevels = { ...this.weaponLevels };
+                SaveManager.save();
+            });
             this.updateShopUI();
             AssetManager.playSound('upgrade'); 
             UIManager.showFloatingText(640, 360, `升级成功! LV.${lvl + 1}`, 0x00ff00);
@@ -311,8 +330,8 @@ export class GameController {
         if (!b) return;
         b.setType(id, lvl);
         b.fire(x, y, angle);
-        AssetManager.playSound('shoot'); // 播放开火音效
-        SceneManager.getLayer(Layers.FX).addChild(b);
+        AssetManager.playSound('shoot');
+        SceneManager.getLayer(Layers.Bullet).addChild(b); // 子弹层：在鱼上方，特效下方
         this.bullets.push(b);
         this.spawnParticles(x + Math.cos(angle)*40, y + Math.sin(angle)*40, 2, 0xffffff, 2);
     }
@@ -369,22 +388,50 @@ export class GameController {
     }
 
     private onHitEffect(id: string, x: number, y: number, lvl: number): void {
+        // [修复] 所有武器击中都有一个快速闪光环，这就是「击中动画」
+        this.spawnHitFlash(x, y);
         switch(id) {
             case 'gatling':
-                this.spawnParticles(x, y, 4, 0xffff00, 3);
+                this.spawnParticles(x, y, 6, 0xffff00, 4);
                 break;
             case 'heavy':
-                AssetManager.playSound('explosion'); // 重炮爆炸音效
-                this.spawnParticles(x, y, 15, 0xffaa00, 5);
+                AssetManager.playSound('explosion');
+                this.spawnParticles(x, y, 18, 0xffaa00, 6);
                 this.spawnShockwave(x, y, 1.0 + lvl*0.2);
                 SceneManager.shake(10, 150);
                 break;
             case 'lightning': 
-                this.spawnParticles(x, y, 5, 0x00ffff, 4);
+                this.spawnParticles(x, y, 8, 0x00ffff, 5);
                 break;
             default:
-                this.spawnParticles(x, y, 3, 0xcccccc, 1);
+                this.spawnParticles(x, y, 4, 0xffffff, 2);
         }
+    }
+
+    // [新增] 击中闪光环动画
+    private spawnHitFlash(x: number, y: number): void {
+        const flash = new PIXI.Graphics();
+        flash.lineStyle(3, 0xffffff, 0.9);
+        flash.drawCircle(0, 0, 1);
+        flash.x = x;
+        flash.y = y;
+        SceneManager.getLayer(Layers.FX).addChild(flash);
+
+        let r = 1;
+        let alpha = 0.9;
+        const tick = () => {
+            r += 6;
+            alpha -= 0.12;
+            flash.clear();
+            flash.lineStyle(3, 0xffffff, alpha);
+            flash.drawCircle(0, 0, r);
+            if (alpha > 0) {
+                requestAnimationFrame(tick);
+            } else {
+                SceneManager.getLayer(Layers.FX).removeChild(flash);
+            }
+        };
+        tick();
     }
 
     private triggerChainLightning(startFish: Fish, maxCount: number, dmg: number): void {

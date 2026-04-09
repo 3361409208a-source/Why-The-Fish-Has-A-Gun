@@ -26,6 +26,8 @@ const initGame = async () => {
     }
     
     if (canvas.style) canvas.style.touchAction = 'none';
+    // 让 canvas 背景透明，这样视频背景才能透过 canvas 显示
+    if (canvas.style) canvas.style.background = 'transparent';
     
     const app = new PIXI.Application({
         view: canvas,
@@ -33,9 +35,12 @@ const initGame = async () => {
         height: window.innerHeight,
         resolution: window.devicePixelRatio || 1,
         autoDensity: true,
-        backgroundColor: 0x00050a,
+        backgroundAlpha: 0, // 关键：canvas 本身透明，背景由 body 或 video 提供
         antialias: false,
     });
+
+    // body 默认深海色（普通地图的底色）
+    document.body.style.background = '#00050a';
 
     // 2. 将存档中的天赋加成注入到全局 Window，供战斗系统读取
     const syncTalents = () => {
@@ -54,13 +59,52 @@ const initGame = async () => {
 
     // 4. 进入选图与升级主页
     UIManager.showMapSelection((config) => {
-        syncTalents(); // 战斗前最后一次同步
+        syncTalents();
         
-        const bgTex = AssetManager.textures[config.tex] || AssetManager.textures['bg_ocean'];
-        const bg = new PIXI.TilingSprite(bgTex, window.innerWidth, window.innerHeight);
+        // 清理旧的视频背景
+        const oldVideo = document.getElementById('bg-video');
+        if (oldVideo) oldVideo.remove();
+
         SceneManager.getLayer(Layers.Background).removeChildren();
-        SceneManager.getLayer(Layers.Background).addChild(bg);
-        SceneManager.setBackground(bg);
+
+        if (config.tex === 'map_lunatic') {
+            // 视频背景：z-index 正确分层
+            // video(z:0) → canvas(z:1) → UI
+            document.body.style.background = 'transparent'; // body 透明，不遮挡视频
+            
+            const video = document.createElement('video');
+            video.id = 'bg-video';
+            video.src = 'assets/map_lunatic.mp4';
+            video.autoplay = true;
+            video.loop = true;
+            video.muted = true;
+            video.playsInline = true;
+            Object.assign(video.style, {
+                position: 'fixed',
+                top: '0', left: '0',
+                width: '100%', height: '100%',
+                objectFit: 'cover',
+                zIndex: '0',   // 在 body 上方，在 canvas 下方
+            });
+            document.body.insertBefore(video, document.body.firstChild);
+
+            // canvas 需要在视频上方
+            if (canvas.style) {
+                canvas.style.position = 'fixed';
+                canvas.style.zIndex = '1';
+            }
+        } else {
+            // 恢复普通地图：body 深海色，canvas 恢复默认
+            document.body.style.background = '#00050a';
+            if (canvas.style) {
+                canvas.style.position = '';
+                canvas.style.zIndex = '';
+            }
+            const bgTex = AssetManager.textures[config.tex] || AssetManager.textures['bg_ocean'];
+            const bg = new PIXI.TilingSprite(bgTex, window.innerWidth, window.innerHeight);
+            SceneManager.getLayer(Layers.Background).addChild(bg);
+            SceneManager.setBackground(bg);
+        }
         
         new GameController(app, config);
     });

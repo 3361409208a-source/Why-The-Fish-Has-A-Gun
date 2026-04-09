@@ -6,7 +6,8 @@ import * as PIXI from 'pixi.js';
 export enum Layers {
     Background = 'background',
     Game = 'game',
-    FX = 'fx', // 高性能特效层
+    Bullet = 'bullet', // 子弹层：在鱼（Game）上方，特效（FX）下方
+    FX = 'fx',
     UI = 'ui'
 }
 
@@ -30,9 +31,10 @@ export class SceneManager {
         
         // 1. 按层级顺序初始化容器
         this.createLayer(Layers.Background); // 最底层
-        this.createLayer(Layers.Game);       
-        this.createLayer(Layers.FX);         // 特效层 (改用标准 Container 以解决稳定性问题)
-        this.createLayer(Layers.UI);         // 最顶层
+        this.createLayer(Layers.Game);        // 鱼群
+        this.createLayer(Layers.Bullet);      // 子弹（在鱼上方）
+        this.createLayer(Layers.FX);          // 粒子特效
+        this.createLayer(Layers.UI);          // 最顶层
 
         this.applyResize();
         window.addEventListener('resize', () => this.applyResize());
