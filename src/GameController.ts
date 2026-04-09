@@ -148,6 +148,13 @@ export class GameController {
         if (this.cannon && this.cannon.parent) {
             this.cannon.parent.removeChild(this.cannon);
         }
+
+        // --- 强制清空所有的战斗相关图层，确保无残留 ---
+        SceneManager.getLayer(Layers.Game).removeChildren();
+        SceneManager.getLayer(Layers.Bullet).removeChildren();
+        SceneManager.getLayer(Layers.FX).removeChildren();
+        // 隐藏掉战斗 HUD
+        UIManager.hideHUD();
     }
 
     private initCannon(): void {
@@ -172,6 +179,7 @@ export class GameController {
         backBtn.on('pointerdown', () => {
             UIManager.showConfirm("确定要放弃本次猎杀并返回总部吗？", "⚠ 撤退确认").then(ok => {
                 if (ok) {
+                    this.destroy(); // 修复关键：返回前必须销毁控制器并清理层级
                     if (this.onBack) {
                         this.onBack();
                     } else {

@@ -79,6 +79,12 @@ export class UIManager {
         parent.addChild(this.comboContainer);
     }
 
+    public static hideHUD(): void {
+        if (this.scoreText) this.scoreText.visible = false;
+        if (this.comboContainer) this.comboContainer.visible = false;
+        if (this.shopContainer) this.shopContainer.visible = false;
+    }
+
     public static updateCombo(count: number): void {
         if (count <= 0) {
             this.comboContainer.visible = false;
