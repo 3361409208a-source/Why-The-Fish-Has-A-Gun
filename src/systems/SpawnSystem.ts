@@ -9,6 +9,8 @@ import type { EffectSystem } from './EffectSystem';
 
 export class SpawnSystem {
     private spawnTimer: number = 0;
+    private stageBossFishes: Fish[] = []; // 当前已生成的关卡boss对象
+    private stageCleared: boolean = false;
 
     constructor(private ctx: GameContext, private effects: EffectSystem) {}
 
@@ -20,6 +22,7 @@ export class SpawnSystem {
     }
 
     update(delta: number): void {
+        // 常规鱼群刷新
         this.spawnTimer += delta;
         const baseInterval = 180 / this.ctx.spawnRate;
         if (this.spawnTimer > baseInterval + Math.random() * baseInterval) {
@@ -35,6 +38,54 @@ export class SpawnSystem {
             }
             this.spawnTimer = 0;
         }
+
+        // 关卡模式专属逻辑
+        if (this.ctx.stageLevel > 0 && !this.stageCleared) {
+            this.updateStageMode(delta);
+        }
+    }
+
+    private updateStageMode(delta: number): void {
+        // 倒计时逐步生成每个 Boss
+        if (this.ctx.stageBossQueue.length > 0) {
+            this.ctx.stageBossSpawnTimer -= delta;
+            if (this.ctx.stageBossSpawnTimer <= 0) {
+                const bossKey = this.ctx.stageBossQueue.shift()!;
+                const bossName = this.ctx.stageBossNames.shift()!;
+                const fish = this.spawnStageBoss(bossKey);
+                if (fish) {
+                    this.stageBossFishes.push(fish);
+                    EventBus.emit(GameEvents.STAGE_BOSS_SPAWNED, { bossKey, bossName });
+                }
+                this.ctx.stageBossSpawnTimer = this.ctx.stageBossSpawnInterval;
+            }
+        }
+
+        // 检查所有已生成的关卡 boss 是否全部被击杀
+        const allSpawned = this.ctx.stageBossQueue.length === 0;
+        if (allSpawned && this.stageBossFishes.length > 0) {
+            const killedCount = this.stageBossFishes.filter(f => !f.isActive).length;
+            if (killedCount > this.ctx.stageBossesKilled) {
+                this.ctx.stageBossesKilled = killedCount;
+            }
+            if (this.ctx.stageBossesKilled >= this.ctx.stageBossesTotal) {
+                this.stageCleared = true;
+                EventBus.emit(GameEvents.STAGE_CLEAR, { levelId: this.ctx.stageLevel });
+            }
+        }
+    }
+
+    private spawnStageBoss(bossKey: string): Fish | null {
+        const side: 'left' | 'right' = Math.random() > 0.5 ? 'left' : 'right';
+        const x = side === 'left' ? -300 : SceneManager.width + 300;
+        const y = 150 + Math.random() * (SceneManager.height - 400);
+        const fish = this.ctx.pool.get('fish', () => new Fish());
+        if (!fish) return null;
+        (window as any).DmgMultCurrent = this.ctx.hpMultiplier;
+        fish.spawn(x, y, side, true, false, bossKey);
+        SceneManager.getLayer(Layers.Game).addChild(fish);
+        this.ctx.fishes.push(fish);
+        return fish;
     }
 
     checkCorePickup(): void {
@@ -53,7 +104,8 @@ export class SpawnSystem {
     }
 
     spawnFish(preferredY?: number, preferredX?: number): void {
-        const isBoss = Math.random() < 0.005 * this.ctx.spawnRate;
+        // 关卡模式禁止随机 Boss 刷新，Boss 由 updateStageMode 专属管理
+        const isBoss = this.ctx.stageLevel > 0 ? false : Math.random() < 0.005 * this.ctx.spawnRate;
         const sideRoll = Math.random();
         let side: 'left' | 'right' = Math.random() > 0.5 ? 'left' : 'right';
         let x: number, y: number;

@@ -30,70 +30,15 @@ export class AssetManager {
     }
 
     private static generateTextures(renderer: PIXI.Renderer): void {
-        // 程序化生成子弹
-        const bulletG = new PIXI.Graphics();
-        bulletG.beginFill(0xffffff).drawRect(0, 0, 20, 4).endFill();
-        bulletG.beginFill(0x00f0ff, 0.5).drawRect(-2, -1, 24, 6).endFill();
-        this.textures['bullet_laser'] = renderer.generateTexture(bulletG);
-
-        const plasmaG = new PIXI.Graphics();
-        plasmaG.beginFill(0x00ff00).drawCircle(10, 5, 10).endFill();
-        plasmaG.beginFill(0xffffff, 0.7).drawCircle(10, 5, 4).endFill();
-        this.textures['bullet_plasma'] = renderer.generateTexture(plasmaG);
-
-        const gatlingG = new PIXI.Graphics();
-        gatlingG.beginFill(0xffff00).drawRect(0, 0, 15, 6).endFill();
-        gatlingG.beginFill(0xffaa00, 0.8).drawRect(-2, -2, 19, 10).endFill();
-        this.textures['bullet_gatling'] = renderer.generateTexture(gatlingG);
-
-        const heavyG = new PIXI.Graphics();
-        heavyG.beginFill(0xff6600).drawRoundedRect(0, 0, 30, 20, 10).endFill();
-        heavyG.beginFill(0xffffff, 0.4).drawEllipse(15, 10, 12, 6).endFill();
-        this.textures['bullet_heavy'] = renderer.generateTexture(heavyG);
-
-        const lightningG = new PIXI.Graphics();
-        lightningG.beginFill(0x00ffff).drawCircle(8, 8, 8).endFill();
-        lightningG.lineStyle(2, 0xffffff).moveTo(0, 8).lineTo(16, 8).moveTo(8, 0).lineTo(8, 16);
-        this.textures['bullet_lightning'] = renderer.generateTexture(lightningG);
-
         const coreG = new PIXI.Graphics();
         coreG.beginFill(0x00ff00).drawPolygon([0, -15, 10, 0, 0, 15, -10, 0]).endFill();
         this.textures['item_core'] = renderer.generateTexture(coreG);
         
-        // 5. [核心优化] 程序化雷电炮台外观 (Lightning Inductor Cannon)
-        const lgtG = new PIXI.Graphics();
-        // 炮塔基座 (深灰色多边形金属感)
-        lgtG.beginFill(0x2c3e50).drawPolygon([-25, 40, 25, 40, 15, -10, -15, -10]).endFill();
-        // 电能量核心 (青色发光球体)
-        lgtG.beginFill(0x00ffff, 0.3).drawCircle(0, 5, 25).endFill(); // 外发光
-        lgtG.beginFill(0x00ffff).drawCircle(0, 5, 12).endFill();    // 核心
-        lgtG.beginFill(0xffffff, 0.8).drawCircle(0, 5, 5).endFill(); // 极高亮
-        // 磁悬浮支架 (细节增强)
-        lgtG.lineStyle(3, 0x95a5a6).moveTo(-15, -10).lineTo(-25, -25);
-        lgtG.lineStyle(3, 0x95a5a6).moveTo(15, -10).lineTo(25, -25);
-        lgtG.lineStyle(2, 0x00ffff).moveTo(-20, -20).lineTo(20, -20);
-        
-        this.textures['gen_lightning_skin'] = renderer.generateTexture(lgtG);
+        const whiteG = new PIXI.Graphics();
+        whiteG.beginFill(0xffffff).drawRect(0, 0, 32, 32).endFill();
+        this.textures['white'] = renderer.generateTexture(whiteG);
 
-        // --- 英雄武器子弹 ---
-        const railG = new PIXI.Graphics();
-        railG.beginFill(0xffaa00).drawRect(0, 0, 40, 8).endFill();
-        railG.beginFill(0xffffff, 0.8).drawRect(5, 2, 30, 4).endFill();
-        this.textures['bullet_railgun'] = renderer.generateTexture(railG);
-
-        const voidG = new PIXI.Graphics();
-        voidG.beginFill(0xcc00ff, 0.4).drawCircle(15, 15, 15).endFill();
-        voidG.beginFill(0xff00ff).drawCircle(15, 15, 8).endFill();
-        voidG.beginFill(0xffffff, 0.8).drawCircle(15, 15, 4).endFill();
-        this.textures['bullet_void'] = renderer.generateTexture(voidG);
-
-        const acidG = new PIXI.Graphics();
-        acidG.beginFill(0x00ff00).drawPolygon([0, 0, 10, -5, 20, 0, 10, 5]).endFill();
-        acidG.beginFill(0x00ff00, 0.5).drawCircle(10, 0, 12).endFill();
-        const acidTex = renderer.generateTexture(acidG);
-        this.textures['bullet_acid'] = acidTex;
-        
-        // --- 核心：将所有生成的纹理加入 PIXI 全局缓存，防止 Texture.from 报错 ---
+        // --- 核心：将所有生成的纹理加入 PIXI 全局缓存 ---
         Object.entries(this.textures).forEach(([name, tex]) => {
             if (!PIXI.Cache.has(name)) PIXI.Texture.addToCache(tex, name);
         });

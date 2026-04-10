@@ -181,4 +181,22 @@ export class Cannon extends PIXI.Sprite {
     public getFireAngle(): number {
         return this.rotation - Math.PI / 2;
     }
+
+    /** 返回炮台机身视觉中心的世界坐标（锚点 anchor.y=0.75，中心偏上 0.25*高度） */
+    public getBodyCenter(): { x: number; y: number } {
+        const offset = 0.25 * this.texture.height * this.scale.y;
+        return {
+            x: this.x + offset * Math.sin(this.rotation),
+            y: this.y - offset * Math.cos(this.rotation),
+        };
+    }
+
+    /** 返回炮眼（炮管顶端）的世界坐标，与 drawFlash 的 muzzleY=-height*0.62 对齐 */
+    public getMuzzlePosition(): { x: number; y: number } {
+        const d = this.texture.height * 0.62 * this.scale.y;
+        return {
+            x: this.x + d * Math.sin(this.rotation),
+            y: this.y - d * Math.cos(this.rotation),
+        };
+    }
 }

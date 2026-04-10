@@ -11,6 +11,7 @@ import { LobbyPage } from './ui/lobby/LobbyPage';
 import { WeaponryPage } from './ui/lobby/WeaponryPage';
 import { ResearchPage } from './ui/lobby/ResearchPage';
 import { MallPage } from './ui/lobby/MallPage';
+import { StagePage } from './ui/lobby/StagePage';
 import type { DialogueLine } from './config/dialogue.config';
 
 /**
@@ -26,11 +27,16 @@ export class UIManager {
     private static mainPageContainer: PIXI.Container;
     private static navContainer: PIXI.Container;
     private static currentOnMapSelected: (config: any) => void;
+    private static currentOnStageSelected: ((levelId: number, config: any) => void) | null = null;
     private static activeTab: string = 'lobby';
 
     // 格式化工具（向后兼容，委托给FloatingText）
     public static formatNumber(num: number): string {
         return FloatingText.formatNumber(num);
+    }
+
+    public static setOnStageSelected(cb: (levelId: number, config: any) => void): void {
+        this.currentOnStageSelected = cb;
     }
 
     public static init(app: PIXI.Application, onMapSelected: (config: any) => void): void {
@@ -139,6 +145,12 @@ export class UIManager {
                 break;
             case 'mall':
                 MallPage.draw(this.mainPageContainer, (id) => this.switchPage(id));
+                this.drawBackButton();
+                break;
+            case 'stage':
+                if (this.currentOnStageSelected) {
+                    StagePage.draw(this.mainPageContainer, this.currentOnStageSelected);
+                }
                 this.drawBackButton();
                 break;
         }

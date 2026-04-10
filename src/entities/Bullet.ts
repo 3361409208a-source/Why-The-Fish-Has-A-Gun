@@ -13,15 +13,17 @@ export class Bullet extends PIXI.Sprite {
     private vx: number = 0;
     private vy: number = 0;
     private trailTimer: number = 0;
-    private weaponType: string = '';
+    public weaponType: string = '';
     private originX: number = 0;
     private originY: number = 0;
     private fireAngle: number = 0;
     private arcGfx: PIXI.Graphics | null = null;
-    private targetFish: Fish | null = null; // 特斯拉线圈模式：锁定目标
+    public targetFish: Fish | null = null;  // 闪电武器：锁定主目标
+    private orbitAngle: number = 0;
+    public hasHit: boolean = false;
 
     constructor() {
-        super(AssetManager.textures['bullet_laser']);
+        super(AssetManager.textures['bullet_v2']);
         this.anchor.set(0.5);
     }
 
@@ -35,16 +37,19 @@ export class Bullet extends PIXI.Sprite {
         const bulletKey = def?.bulletKey ?? 'bullet_v2';
 
         if (type === 'lightning') {
-            // 用 PIXI.Texture.EMPTY 隐藏精灵贴图，不能用 alpha=0（会连子节点 arcGfx 一起隐藏）
             this.texture = PIXI.Texture.EMPTY;
             this.alpha = 1;
             if (!this.arcGfx) {
                 this.arcGfx = new PIXI.Graphics();
+                this.arcGfx.blendMode = PIXI.BLEND_MODES.ADD;
                 this.addChild(this.arcGfx);
             }
             this.arcGfx.visible = true;
+            this.arcGfx.alpha = 1;
             this.arcGfx.clear();
             this.scale.set(1);
+            this.alpha = 1;
+            this.orbitAngle = Math.random() * Math.PI * 2;
         } else {
             this.alpha = 1;
             this.texture = AssetManager.textures[bulletKey] || AssetManager.textures['bullet_v2'];
@@ -62,22 +67,22 @@ export class Bullet extends PIXI.Sprite {
     }
 
     public fire(x: number, y: number, angle: number, target?: Fish): void {
-        const offset = 60;
         this.originX = x;
         this.originY = y;
         this.fireAngle = angle;
         this.targetFish = target || null;
 
-        if (this.weaponType === 'lightning' && this.targetFish) {
-            // 特斯拉线圈模式：瞬移到目标位置，不移动，持续连接
-            this.x = this.targetFish.x;
-            this.y = this.targetFish.y;
+        if (this.weaponType === 'lightning') {
+            // 环绕模式：停在炮台机身中心
+            this.x = x;
+            this.y = y;
             this.vx = 0;
             this.vy = 0;
-            this.rotation = 0; // 电弧方向由坐标计算决定，无需旋转
+            this.rotation = 0;
         } else {
-            this.x = x + Math.cos(angle) * offset;
-            this.y = y + Math.sin(angle) * offset;
+            // 从炮眼位置出发（调用方已传入炮眼坐标）
+            this.x = x;
+            this.y = y;
             this.vx = Math.cos(angle) * this.speed;
             this.vy = Math.sin(angle) * this.speed;
             this.rotation = angle + Math.PI / 2;
@@ -85,6 +90,7 @@ export class Bullet extends PIXI.Sprite {
         this.isActive = true;
         this.visible = true;
         this.trailTimer = 0;
+        this.hasHit = false;
     }
 
     public update(delta: number): void {
@@ -94,17 +100,13 @@ export class Bullet extends PIXI.Sprite {
         }
 
         if (this.weaponType === 'lightning') {
-            // 特斯拉线圈模式：跟随目标，持续电弧连接
-            if (!this.targetFish || !this.targetFish.isActive) {
+            // 环绕模式：停在炮台中心，绘制旋转环绕电弧
+            if (this.arcGfx) {
+                this.drawLightningOrbit();
+            }
+            if (this.trailTimer > 26) {
                 this.kill();
                 return;
-            }
-            // 跟随目标位置
-            this.x = this.targetFish.x;
-            this.y = this.targetFish.y;
-            // 重绘从炮台到目标的电弧
-            if (this.arcGfx) {
-                this.drawLightningBeam();
             }
         } else {
             // 普通子弹飞行
@@ -113,7 +115,7 @@ export class Bullet extends PIXI.Sprite {
         }
 
         this.trailTimer += delta;
-        if (this.trailTimer > 240) {
+        if (this.weaponType !== 'lightning' && this.trailTimer > 240) {
             this.kill();
             return;
         }
@@ -126,7 +128,60 @@ export class Bullet extends PIXI.Sprite {
         }
     }
 
-    /** 特斯拉线圈模式：绘制从炮台到当前位置（目标）的电弧 */
+    /** 环绕模式：围绕炮台中心绘制旋转多向电弧 */
+    private drawLightningOrbit(): void {
+        const g = this.arcGfx!;
+        g.clear();
+        this.orbitAngle += 0.10;
+
+        const numArcs = 5;
+        const outerR = 90 + Math.sin(this.orbitAngle * 2.3) * 18;
+
+        for (let i = 0; i < numArcs; i++) {
+            const angle = this.orbitAngle + (i * Math.PI * 2 / numArcs);
+            const ex = Math.cos(angle) * outerR;
+            const ey = Math.sin(angle) * outerR;
+            this.drawOrbitSegment(g, ex, ey);
+        }
+
+        // 中心发光点
+        g.beginFill(0x00ffff, 0.35);
+        g.drawCircle(0, 0, 14);
+        g.endFill();
+        g.beginFill(0xffffff, 0.8);
+        g.drawCircle(0, 0, 5);
+        g.endFill();
+    }
+
+    private drawOrbitSegment(g: PIXI.Graphics, ex: number, ey: number): void {
+        const dist = Math.sqrt(ex * ex + ey * ey);
+        if (dist < 2) return;
+        const pnX = -ey / dist;
+        const pnY =  ex / dist;
+
+        const segments = 5;
+        const pts: [number, number][] = [[0, 0]];
+        for (let i = 1; i < segments; i++) {
+            const t = i / segments;
+            const off = (Math.random() - 0.5) * 22;
+            pts.push([ex * t + pnX * off, ey * t + pnY * off]);
+        }
+        pts.push([ex, ey]);
+
+        g.lineStyle(9, 0x00ffff, 0.18);
+        g.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+
+        g.lineStyle(3.5, 0x88eeff, 0.75);
+        g.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+
+        g.lineStyle(1.5, 0xffffff, 1.0);
+        g.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+    }
+
+    /** 特斯拉线圈模式：绘制从炮台到当前位置（目标）的电弧（保留备用） */
     private drawLightningBeam(): void {
         const g = this.arcGfx!;
         g.clear();

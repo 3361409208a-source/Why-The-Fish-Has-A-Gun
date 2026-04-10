@@ -5,6 +5,7 @@ import { Cannon } from './entities/Cannon';
 import { UIManager } from './UIManager';
 import { SaveManager } from './SaveManager';
 import { WEAPONS } from './config/weapons.config';
+import { LEVELS } from './config/levels.config';
 import { EventBus } from './core/EventBus';
 import { GameEvents } from './core/GameEvents';
 import { UIBridge } from './core/UIBridge';
@@ -29,7 +30,7 @@ export class GameController {
     private input: InputSystem;
     private tickerFunc: (delta: number) => void;
 
-    constructor(app: PIXI.Application, config: any, dialogueLines?: any[], onBack?: () => void) {
+    constructor(app: PIXI.Application, config: any, dialogueLines?: any[], onBack?: () => void, stageLevel: number = 0) {
         const pool = PoolManager.getInstance();
         const cannon = new Cannon();
         cannon.x = SceneManager.width / 2;
@@ -53,8 +54,29 @@ export class GameController {
             comboTimer: 0,
             isPaused: false,
             isAutoMode: true,
+            isManualAiming: false,
+            manualAimX: 0,
+            manualAimY: 0,
             frozenTime: 0,
+            stageLevel,
+            stageBossQueue: [],
+            stageBossNames: [],
+            stageBossSpawnTimer: 0,
+            stageBossSpawnInterval: 0,
+            stageBossesTotal: 0,
+            stageBossesKilled: 0,
         };
+
+        if (stageLevel > 0) {
+            const lvl = LEVELS.find(l => l.id === stageLevel);
+            if (lvl) {
+                this.ctx.stageBossQueue    = lvl.bosses.map(b => b.bossKey);
+                this.ctx.stageBossNames    = lvl.bosses.map(b => b.name);
+                this.ctx.stageBossesTotal  = lvl.bosses.length;
+                this.ctx.stageBossSpawnInterval = lvl.bossSpawnInterval;
+                this.ctx.stageBossSpawnTimer    = lvl.bossSpawnInterval;
+            }
+        }
 
         const savedLevels = SaveManager.state.weaponLevels || {};
         for (const w of WEAPONS) {
@@ -67,11 +89,12 @@ export class GameController {
         this.spawner = new SpawnSystem(this.ctx, this.effects);
         this.combat  = new CombatSystem(this.ctx, this.effects, this.spawner);
         this.weapons = new WeaponSystem(this.ctx, this.effects);
-        this.input   = new InputSystem(app, cannon, () => this.ctx.isPaused);
+        this.input   = new InputSystem(app, cannon, () => this.ctx.isPaused, this.ctx);
 
         this.initBackButton(app, onBack);
         this.input.init();
         this.weapons.updateShopUI();
+        if (stageLevel > 0) this.initStageEvents(app, stageLevel, onBack);
 
         this.tickerFunc = (delta: number) => {
             if (this.ctx.isPaused) return;
@@ -91,6 +114,45 @@ export class GameController {
         } else {
             this.spawner.preWarm();
         }
+    }
+
+    private initStageEvents(app: PIXI.Application, stageLevel: number, onBack?: () => void): void {
+        const lvlDef = LEVELS.find(l => l.id === stageLevel);
+
+        // Boss登场对话
+        const bossSpawnUnsub = EventBus.on(GameEvents.STAGE_BOSS_SPAWNED, (payload: any) => {
+            const bossEntry = lvlDef?.bosses.find(b => b.bossKey === payload.bossKey);
+            if (bossEntry?.spawnDialogue && bossEntry.spawnDialogue.length > 0) {
+                this.ctx.isPaused = true;
+                UIManager.showDialogue(bossEntry.spawnDialogue).then(() => {
+                    this.ctx.isPaused = false;
+                });
+            }
+        });
+
+        // 通关处理
+        const stageClearUnsub = EventBus.on(GameEvents.STAGE_CLEAR, (payload: any) => {
+            bossSpawnUnsub();
+            stageClearUnsub();
+            this.ctx.isPaused = true;
+            import('./SaveManager').then(({ SaveManager }) => {
+                if (!SaveManager.state.clearedStages.includes(payload.levelId)) {
+                    SaveManager.state.clearedStages.push(payload.levelId);
+                    SaveManager.save();
+                }
+            });
+            UIManager.showConfirm(
+                `异常清除完毕！\n本局收益: ${UIManager.formatNumber(Math.floor(this.ctx.crystals))} 晶体`,
+                `✓ 第 ${payload.levelId} 关 通关！`
+            ).then(ok => {
+                this.destroy();
+                if (onBack) onBack();
+                else {
+                    SceneManager.getLayer(Layers.UI).removeChildren();
+                    UIManager.init(app, (cfg) => new GameController(app, cfg));
+                }
+            });
+        });
     }
 
     private initBackButton(app: PIXI.Application, onBack?: () => void): void {

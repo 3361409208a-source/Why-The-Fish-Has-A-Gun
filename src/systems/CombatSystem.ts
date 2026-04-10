@@ -18,18 +18,32 @@ export class CombatSystem {
     checkCollisions(): void {
         for (const b of this.ctx.bullets) {
             if (!b.isActive) continue;
+
+            // ── 闪电武器：直接击中锁定的主目标，再由连锁跳到其他鱼 ──
+            if (b.weaponType === 'lightning') {
+                if (b.hasHit) continue; // 本周期已命中，轨道继续播完
+                const target = b.targetFish;
+                if (!target || !target.isActive) continue; // 目标不存在或已死
+                b.hasHit = true;
+                const id = this.ctx.unlockedWeapons[this.ctx.currentWeaponIndex];
+                const lvl = this.ctx.weaponLevels[id] || 1;
+                // 从炮台轨道中心射出主电弧到目标鱼
+                this.effects.spawnLightning(b.x, b.y, target.x, target.y);
+                this.onHitEffect(id, target.x, target.y, lvl);
+                AssetManager.playSound('lightning', 1, 1);
+                const dmgMult = (window as any).TalentDmgMult || 1.0;
+                this.applyDamage(target, b.damage * dmgMult);
+                this.triggerChainLightning(target, CHAIN.baseTargets + lvl, b.damage * CHAIN.damageFalloff * dmgMult);
+                continue;
+            }
+
+            // ── 普通武器：飞行碰撞检测 ──
             for (const f of this.ctx.fishes) {
                 if (!f.isActive) continue;
                 const dx = b.x - f.x;
                 const dy = b.y - f.y;
                 const distSq = dx * dx + dy * dy;
-                
-                // 核心修正：使用“鱼身最小侧”（通常是高度，即厚度）的一半作为判定基础
-                // 同时加入 0.6 的收缩系数，确保子弹必须“碰肉”才爆
-                // 使用鱼类自带的物理判定半径，完美避开透明边框干扰
-                const hitRadius = f.hitRadius;
-                
-                if (distSq < hitRadius * hitRadius) {
+                if (distSq < f.hitRadius * f.hitRadius) {
                     b.kill();
                     const id = this.ctx.unlockedWeapons[this.ctx.currentWeaponIndex];
                     const lvl = this.ctx.weaponLevels[id] || 1;
@@ -37,20 +51,15 @@ export class CombatSystem {
 
                     if (id === 'heavy') {
                         const rangeSq = Math.pow(AOE.baseRange + lvl * AOE.rangePerLevel, 2);
-                        for (const target of this.ctx.fishes) {
-                            if (!target.isActive) continue;
-                            const tdx = target.x - b.x;
-                            const tdy = target.y - b.y;
+                        for (const t of this.ctx.fishes) {
+                            if (!t.isActive) continue;
+                            const tdx = t.x - b.x;
+                            const tdy = t.y - b.y;
                             if (tdx * tdx + tdy * tdy < rangeSq) {
                                 const dmgMult = (window as any).TalentDmgMult || 1.0;
-                                this.applyDamage(target, b.damage * AOE.damageFalloff * dmgMult);
+                                this.applyDamage(t, b.damage * AOE.damageFalloff * dmgMult);
                             }
                         }
-                    } else if (id === 'lightning') {
-                        AssetManager.playSound('lightning', 1, 1);
-                        const dmgMult = (window as any).TalentDmgMult || 1.0;
-                        this.applyDamage(f, b.damage * dmgMult);
-                        this.triggerChainLightning(f, CHAIN.baseTargets + lvl, b.damage * CHAIN.damageFalloff * dmgMult);
                     } else {
                         AssetManager.playSound('hit');
                         const dmgMult = (window as any).TalentDmgMult || 1.0;

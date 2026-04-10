@@ -39,6 +39,7 @@ import { UIManager } from './UIManager';
 import { SaveManager } from './SaveManager';
 import { getDialogue } from './config/dialogue.config';
 import { getMap } from './config/maps.config';
+import { LEVELS } from './config/levels.config';
 import { talentManager } from './core/TalentManager';
 
 /**
@@ -216,8 +217,55 @@ const initGame = async () => {
         talentManager.syncToWindow();
     };
 
+    // 关卡模式切入逻辑
+    const onStageSelected = async (levelId: number, config: any) => {
+        const lvlDef = LEVELS.find(l => l.id === levelId);
+        if (!lvlDef) return;
+
+        SceneManager.setBackground(lvlDef.bgKey || 'bg_ocean');
+        SceneManager.isGaming = true;
+        SceneManager.clearAmbientFishes();
+
+        if (activeController) { activeController.destroy(); activeController = null; }
+        UIManager.hideAll();
+
+        const video = document.getElementById('bg-video');
+        if (video) video.remove();
+
+        const mapDef = getMap(lvlDef.bgKey);
+        const videoUrl = !isWX && mapDef?.videoUrl;
+        if (videoUrl && typeof document !== 'undefined' && document.body) {
+            const v = document.createElement('video');
+            v.id = 'bg-video';
+            v.src = videoUrl;
+            v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true;
+            Object.assign(v.style, { position: 'fixed', top: '0', left: '0', width: '100%', height: '100%', objectFit: 'cover', zIndex: '1' });
+            v.onplaying = () => { app.renderer.background.alpha = 0; SceneManager.setBackground(''); };
+            document.body.insertBefore(v, document.body.firstChild);
+            v.play().catch(() => {});
+        } else {
+            app.renderer.background.alpha = 1;
+        }
+
+        const backToLobby = () => {
+            SceneManager.isGaming = false;
+            UIManager.showMapSelection(onMapSelected);
+            SceneManager.setBackground('bg_ocean');
+        };
+
+        activeController = new GameController(
+            app,
+            config,
+            lvlDef.openingDialogue,
+            backToLobby,
+            levelId,
+        );
+        talentManager.syncToWindow();
+    };
+
     // 7. 进入游戏流程
     UIManager.init(app, onMapSelected);
+    UIManager.setOnStageSelected(onStageSelected);
 
     // 初始设置背景
     SceneManager.setBackground('bg_ocean');

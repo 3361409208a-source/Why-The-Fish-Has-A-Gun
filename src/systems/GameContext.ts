@@ -39,5 +39,16 @@ export interface GameContext {
     // 控制
     isPaused: boolean;
     isAutoMode: boolean;
+    isManualAiming: boolean; // 玩家正在手动拖动/触摸瞄准，禁止自动追鱼覆盖
+    manualAimX: number;      // 最近一次手动指向的屏幕 X
+    manualAimY: number;      // 最近一次手动指向的屏幕 Y
     frozenTime: number;
+    // 关卡模式（0 = 随机模式，1-10 = 关卡模式）
+    stageLevel: number;
+    stageBossQueue: string[];      // 待生成的 bossKey 队列（按顺序）
+    stageBossNames: string[];      // 对应名称（与队列同步）
+    stageBossSpawnTimer: number;   // 下一个 Boss 的生成倒计时（帧）
+    stageBossSpawnInterval: number;// Boss 生成间隔（帧）
+    stageBossesTotal: number;      // 本关总 Boss 数
+    stageBossesKilled: number;     // 已击杀 Boss 数
 }

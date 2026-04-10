@@ -1,5 +1,6 @@
 import * as PIXI from 'pixi.js';
 import type { Cannon } from '../entities/Cannon';
+import type { GameContext } from './GameContext';
 
 export class InputSystem {
     private isDragging: boolean = false;
@@ -7,7 +8,8 @@ export class InputSystem {
     constructor(
         private app: PIXI.Application,
         private cannon: Cannon,
-        private isPaused: () => boolean
+        private isPaused: () => boolean,
+        private ctx?: GameContext
     ) {}
 
     init(): void {
@@ -18,16 +20,27 @@ export class InputSystem {
             if (this.isPaused()) return;
             const localPos = e.getLocalPosition(this.app.stage);
             this.cannon.lookAt(localPos.x, localPos.y);
+            if (this.ctx) { this.ctx.manualAimX = localPos.x; this.ctx.manualAimY = localPos.y; }
         };
 
         this.app.stage.on('pointerdown', (e) => {
             if (this.isPaused()) return;
             this.isDragging = true;
+            if (this.ctx) this.ctx.isManualAiming = true;
             onMove(e);
         });
-        this.app.stage.on('pointerup', () => { this.isDragging = false; });
-        this.app.stage.on('pointerupoutside', () => { this.isDragging = false; });
-        this.app.stage.on('pointercancel', () => { this.isDragging = false; });
+        this.app.stage.on('pointerup', () => {
+            this.isDragging = false;
+            if (this.ctx) this.ctx.isManualAiming = false;
+        });
+        this.app.stage.on('pointerupoutside', () => {
+            this.isDragging = false;
+            if (this.ctx) this.ctx.isManualAiming = false;
+        });
+        this.app.stage.on('pointercancel', () => {
+            this.isDragging = false;
+            if (this.ctx) this.ctx.isManualAiming = false;
+        });
         this.app.stage.on('pointermove', (e) => {
             if (this.isPaused()) return;
             if (this.isDragging || e.buttons > 0 || e.pointerType === 'touch') onMove(e);
@@ -54,8 +67,8 @@ export class InputSystem {
                     this.cannon.lookAt(pos.x, pos.y);
                 }
             });
-            wx.onTouchEnd(() => { this.isDragging = false; });
-            wx.onTouchCancel(() => { this.isDragging = false; });
+            wx.onTouchEnd(() => { this.isDragging = false; if (this.ctx) this.ctx.isManualAiming = false; });
+            wx.onTouchCancel(() => { this.isDragging = false; if (this.ctx) this.ctx.isManualAiming = false; });
         }
     }
 }

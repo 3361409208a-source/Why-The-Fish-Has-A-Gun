@@ -58,7 +58,7 @@ export class Fish extends PIXI.Sprite {
         }
     }
 
-    public spawn(x: number, y: number, side: 'left' | 'right', isBoss: boolean = false, isMinion: boolean = false): void {
+    public spawn(x: number, y: number, side: 'left' | 'right', isBoss: boolean = false, isMinion: boolean = false, forceBossKey?: string): void {
         this.x = x;
         this.y = y;
         // 目标高度：如果是上下边缘出生的，强制给一个屏幕内的目标点使其游入画面
@@ -86,7 +86,15 @@ export class Fish extends PIXI.Sprite {
 
         if (isBoss) {
             const hpRoll = 0.5 + Math.random() * 0.5;
-            const bossType = Math.random();
+            // 关卡模式强制指定 bossKey → 映射到对应的 bossType 区间中点
+            const bossKeyToType: Record<string, number> = {
+                'boss_gg': 0.05, 'titan_whale': 0.15, 'titan_serpent': 0.25,
+                'titan_shark': 0.35, 'titan_dragon': 0.45, 'leviathan': 0.55,
+                'whale': 0.65, 'crab': 0.75, 'manta': 0.85, 'dragon': 0.95,
+            };
+            const bossType = (forceBossKey && bossKeyToType[forceBossKey] !== undefined)
+                ? bossKeyToType[forceBossKey]
+                : Math.random();
             if (bossType < 0.10) {
                 this.bossKey = 'boss_gg';
                 tex = AssetManager.textures['boss_gg'];

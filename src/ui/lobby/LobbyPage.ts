@@ -22,14 +22,63 @@ export class LobbyPage {
             mapContainer.addChild(card);
         });
 
+        this.drawStageBanner(container, onSwitchPage);
         this.drawSideHUD(sideNav, onSwitchPage);
+    }
+
+    private static drawStageBanner(container: PIXI.Container, onSwitchPage: (id: string) => void): void {
+        const W = SceneManager.width;
+        const banner = new PIXI.Container();
+        banner.x = (W - 860) / 2;
+        banner.y = 590;
+        container.addChild(banner);
+
+        const bg = new PIXI.Graphics()
+            .beginFill(0x0a1520, 0.95)
+            .lineStyle(3, 0xff6600, 1)
+            .drawRoundedRect(0, 0, 860, 90, 14)
+            .endFill();
+        banner.addChild(bg);
+
+        const glow = new PIXI.Graphics()
+            .lineStyle(1, 0xff6600, 0.3)
+            .drawRoundedRect(-4, -4, 868, 98, 16);
+        banner.addChild(glow);
+
+        const icon = new PIXI.Text('★', { fontSize: 36, fill: 0xff6600 });
+        icon.x = 22; icon.y = 26;
+        banner.addChild(icon);
+
+        const title = new PIXI.Text('关卡挑战模式  BOSS STAGE', {
+            fontSize: 28, fill: 0xff8800, fontWeight: 'bold', letterSpacing: 2,
+        });
+        title.x = 70; title.y = 14;
+        banner.addChild(title);
+
+        const desc = new PIXI.Text('10关累积 Boss 振战 · 层层加码 · 击杀全部 Boss 即通关', {
+            fontSize: 15, fill: 0x888888,
+        });
+        desc.x = 70; desc.y = 52;
+        banner.addChild(desc);
+
+        const arrowTxt = new PIXI.Text('点击进入 »', {
+            fontSize: 20, fill: 0xffffff, fontWeight: 'bold',
+        });
+        arrowTxt.anchor.set(1, 0.5); arrowTxt.x = 840; arrowTxt.y = 45;
+        banner.addChild(arrowTxt);
+
+        banner.eventMode = 'static'; banner.cursor = 'pointer';
+        banner.on('pointerover', () => { bg.tint = 0xdd5500; banner.scale.set(1.02); });
+        banner.on('pointerout',  () => { bg.tint = 0xffffff; banner.scale.set(1); });
+        banner.on('pointerdown', () => onSwitchPage('stage'));
     }
 
     private static drawSideHUD(nav: PIXI.Container, onSwitchPage: (id: string) => void): void {
         const tabs = [
             { id: 'weaponry', name: 'ARSENAL', icon: 'cannon_v3', desc: '武器库档案馆' },
             { id: 'research', name: 'CORE TECH', icon: 'skin_lightning', desc: '升级研究中心' },
-            { id: 'mall', name: 'HERO MALL', icon: 'skin_railgun', desc: '英雄武器商店' }
+            { id: 'mall', name: 'HERO MALL', icon: 'skin_railgun', desc: '英雄武器商店' },
+            { id: 'stage', name: 'STAGE MODE', icon: 'boss_leviathan', desc: '关卡挺战 Boss' },
         ];
 
         const W = SceneManager.width;

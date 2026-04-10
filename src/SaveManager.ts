@@ -12,6 +12,7 @@ export class SaveManager {
         unlockedMaps: string[];
         weaponLevels: { [id: string]: number };
         goldUnlockedWeapons: string[];
+        clearedStages: number[];
     } = {
         gold: 1000,
         talents: {
@@ -22,7 +23,8 @@ export class SaveManager {
         },
         unlockedMaps: ['normal'],
         weaponLevels: {}, // 武器等级持久化存储
-        goldUnlockedWeapons: [] // 永久解锁的武器 (金币购买)
+        goldUnlockedWeapons: [], // 永久解锁的武器 (金币购买)
+        clearedStages: [] as number[], // 已通关的关卡 ID 列表
     };
 
     /**
@@ -52,6 +54,9 @@ export class SaveManager {
                 }
                 if (parsed.weaponLevels) {
                     Object.assign(this.state.weaponLevels, parsed.weaponLevels);
+                }
+                if (Array.isArray(parsed.clearedStages)) {
+                    this.state.clearedStages = parsed.clearedStages;
                 }
             } catch (e) {
                 console.error('Failed to parse save data', e);

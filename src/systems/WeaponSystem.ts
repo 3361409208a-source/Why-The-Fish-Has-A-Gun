@@ -92,6 +92,19 @@ export class WeaponSystem {
         const id = this.ctx.unlockedWeapons[this.ctx.currentWeaponIndex];
         const def = getWeapon(id);
         if (!def) return;
+
+        // 自动瞄准最近的活跃鱼（闪电武器无需瞄准；玩家手动操作时不覆盖）
+        if (id !== 'lightning' && !this.ctx.isManualAiming) {
+            let nearest = null;
+            let minDist = Infinity;
+            for (const f of this.ctx.fishes) {
+                if (!f.isActive) continue;
+                const d = Math.hypot(f.x - this.ctx.cannon.x, f.y - this.ctx.cannon.y);
+                if (d < minDist) { minDist = d; nearest = f; }
+            }
+            if (nearest) this.ctx.cannon.lookAt(nearest.x, nearest.y);
+        }
+
         this.autoFireTimer += delta;
         const fireRateMult = (window as any).TalentFireRateMult || 1.0;
         if (this.autoFireTimer > def.fireInterval / fireRateMult) {
@@ -114,20 +127,30 @@ export class WeaponSystem {
         const id = this.ctx.unlockedWeapons[this.ctx.currentWeaponIndex];
         const lvl = this.ctx.weaponLevels[id] || 1;
 
-        // 闪电武器：特斯拉线圈模式，自动连接最近敌人
-        let targetFish = null;
+        // 闪电武器：轨道停在炮台锚点（旋转中心），无需偏移；其他武器从炮眼发射
+        const firePos = id === 'lightning'
+            ? { x: this.ctx.cannon.x, y: this.ctx.cannon.y }
+            : this.ctx.cannon.getMuzzlePosition();
+
+        // 闪电武器：手动瞄准时找最靠近炮台指向方向的鱼，自动模式找最近的鱼
+        let lightningTarget = undefined;
         if (id === 'lightning') {
-            const maxRange = 900;
-            let minDist = maxRange;
-            for (const f of this.ctx.fishes) {
-                if (!f.isActive) continue;
-                const d = Math.sqrt((f.x - x) ** 2 + (f.y - y) ** 2);
-                if (d < minDist) {
-                    minDist = d;
-                    targetFish = f;
+            if (this.ctx.isManualAiming) {
+                // 找最靠近玩家触摸/点击位置的鱼
+                let minDist = Infinity;
+                for (const f of this.ctx.fishes) {
+                    if (!f.isActive) continue;
+                    const d = Math.hypot(f.x - this.ctx.manualAimX, f.y - this.ctx.manualAimY);
+                    if (d < minDist) { minDist = d; lightningTarget = f; }
+                }
+            } else {
+                let minDist = Infinity;
+                for (const f of this.ctx.fishes) {
+                    if (!f.isActive) continue;
+                    const d = Math.hypot(f.x - this.ctx.cannon.x, f.y - this.ctx.cannon.y);
+                    if (d < minDist) { minDist = d; lightningTarget = f; }
                 }
             }
-            if (!targetFish) return; // 没目标不发射
         }
 
         const b = this.ctx.pool.get('bullet', () => new Bullet());
@@ -135,13 +158,13 @@ export class WeaponSystem {
         const dmgMult = (window as any).TalentDmgMult || 1.0;
         const speedMult = (window as any).TalentSpeedMult || 1.0;
         b.setType(id, lvl, dmgMult, speedMult);
-        b.fire(x, y, angle, targetFish || undefined);
+        b.fire(firePos.x, firePos.y, angle, lightningTarget);
         this.ctx.cannon.triggerFire(id);
         // lightning: 持续8s电流音，noOverlap防重叠
         // 其他武器: 每次最多播0.05s短促射击音，noOverlap限速上限防高射速武器爆音
         AssetManager.playSound(id === 'lightning' ? 'lightning' : 'shoot', 1, id === 'lightning' ? 8 : 0.05, true);
         SceneManager.getLayer(Layers.Bullet).addChild(b);
         this.ctx.bullets.push(b);
-        this.effects.spawnParticles(x + Math.cos(angle) * 40, y + Math.sin(angle) * 40, 2, 0xffffff, 2);
+        this.effects.spawnParticles(firePos.x + Math.cos(angle) * 40, firePos.y + Math.sin(angle) * 40, 2, 0xffffff, 2);
     }
 }
