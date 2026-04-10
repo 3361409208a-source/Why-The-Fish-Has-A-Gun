@@ -26,8 +26,8 @@ export class CombatSystem {
                 
                 // 核心修正：使用“鱼身最小侧”（通常是高度，即厚度）的一半作为判定基础
                 // 同时加入 0.6 的收缩系数，确保子弹必须“碰肉”才爆
-                const baseSize = Math.min(Math.abs(f.width), Math.abs(f.height));
-                const hitRadius = (baseSize / 2) * 0.65; 
+                // 使用鱼类自带的物理判定半径，完美避开透明边框干扰
+                const hitRadius = f.hitRadius;
                 
                 if (distSq < hitRadius * hitRadius) {
                     b.kill();
