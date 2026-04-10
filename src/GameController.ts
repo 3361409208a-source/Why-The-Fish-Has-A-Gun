@@ -178,6 +178,10 @@ export class GameController {
             const entity = list[i];
             entity.update(delta);
             if (!entity.isActive) {
+                // 核心修复：彻底从显示层级移除，防止渲染泄露
+                if (entity.parent) {
+                    entity.parent.removeChild(entity);
+                }
                 list.splice(i, 1);
                 this.ctx.pool.put(type, entity);
             }

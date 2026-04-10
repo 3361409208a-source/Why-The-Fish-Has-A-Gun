@@ -42,7 +42,7 @@ export class CombatSystem {
                             }
                         }
                     } else if (id === 'lightning') {
-                        AssetManager.playSound('lightning');
+                        AssetManager.playSound('lightning', 1, 1);
                         const dmgMult = (window as any).TalentDmgMult || 1.0;
                         this.applyDamage(f, b.damage * dmgMult);
                         this.triggerChainLightning(f, CHAIN.baseTargets + lvl, b.damage * CHAIN.damageFalloff * dmgMult);
@@ -92,6 +92,7 @@ export class CombatSystem {
             }
             if (next) {
                 this.effects.spawnLightning(current.x, current.y, next.x, next.y);
+                AssetManager.playSound('lightning', 1, 3);
                 this.applyDamage(next, dmg);
                 hitSet.add(next);
                 current = next;

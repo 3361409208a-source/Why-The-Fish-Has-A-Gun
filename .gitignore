@@ -1,7 +1,6 @@
-node_modules/
-dist/
-dist_h5/
-.DS_Store
-*.local
-.gemini/
-.env
+AI-Image-Processor/
+bin/
+obj/
+*.user
+*.pdb
+.vs/

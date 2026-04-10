@@ -88,6 +88,7 @@ export class WeaponSystem {
     }
 
     handleAutoFire(delta: number): void {
+        this.ctx.cannon.update(delta);
         const id = this.ctx.unlockedWeapons[this.ctx.currentWeaponIndex];
         const def = getWeapon(id);
         if (!def) return;
@@ -112,13 +113,33 @@ export class WeaponSystem {
     fire(x: number, y: number, angle: number): void {
         const id = this.ctx.unlockedWeapons[this.ctx.currentWeaponIndex];
         const lvl = this.ctx.weaponLevels[id] || 1;
+
+        // 闪电武器：特斯拉线圈模式，自动连接最近敌人
+        let targetFish = null;
+        if (id === 'lightning') {
+            const maxRange = 900;
+            let minDist = maxRange;
+            for (const f of this.ctx.fishes) {
+                if (!f.isActive) continue;
+                const d = Math.sqrt((f.x - x) ** 2 + (f.y - y) ** 2);
+                if (d < minDist) {
+                    minDist = d;
+                    targetFish = f;
+                }
+            }
+            if (!targetFish) return; // 没目标不发射
+        }
+
         const b = this.ctx.pool.get('bullet', () => new Bullet());
         if (!b) return;
         const dmgMult = (window as any).TalentDmgMult || 1.0;
         const speedMult = (window as any).TalentSpeedMult || 1.0;
         b.setType(id, lvl, dmgMult, speedMult);
-        b.fire(x, y, angle);
-        AssetManager.playSound('shoot');
+        b.fire(x, y, angle, targetFish || undefined);
+        this.ctx.cannon.triggerFire(id);
+        // lightning: 持续8s电流音，noOverlap防重叠
+        // 其他武器: 每次最多播0.05s短促射击音，noOverlap限速上限防高射速武器爆音
+        AssetManager.playSound(id === 'lightning' ? 'lightning' : 'shoot', 1, id === 'lightning' ? 8 : 0.05, true);
         SceneManager.getLayer(Layers.Bullet).addChild(b);
         this.ctx.bullets.push(b);
         this.effects.spawnParticles(x + Math.cos(angle) * 40, y + Math.sin(angle) * 40, 2, 0xffffff, 2);

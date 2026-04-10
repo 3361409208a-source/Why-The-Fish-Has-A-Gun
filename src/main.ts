@@ -64,6 +64,20 @@ const initGame = async () => {
     if (canvas.style) canvas.style.touchAction = 'none';
     if (canvas.style) canvas.style.background = 'transparent';
     
+    // 微信真机修复：用实际游戏 canvas 替换 PIXI 内部 WebGL 探测逻辑
+    // (真机上 document.createElement('canvas') 创建的第二个 canvas 不支持 WebGL)
+    if (isWX) {
+        try {
+            const utils = (PIXI as any).utils;
+            if (utils && typeof utils.isWebGLSupported === 'function') {
+                utils.isWebGLSupported = () => {
+                    try { return !!(canvas.getContext('webgl') || (canvas as any).getContext('experimental-webgl')); }
+                    catch (e) { return false; }
+                };
+            }
+        } catch (e) { console.warn('PIXI patch failed:', e); }
+    }
+
     const app = new PIXI.Application({
         view: canvas,
         width: window.innerWidth,

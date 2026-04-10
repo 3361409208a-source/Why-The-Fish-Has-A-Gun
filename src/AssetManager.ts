@@ -7,6 +7,7 @@ export class AssetManager {
     public static textures: { [key: string]: PIXI.Texture } = {};
     private static audioCtx: AudioContext;
     private static soundBuffers: { [key: string]: AudioBuffer } = {};
+    private static soundEndTimes: { [key: string]: number } = {};
 
     public static async init(renderer: PIXI.Renderer, onProgress?: (p: number) => void): Promise<void> {
         console.log('Starting asset initialization...');
@@ -100,7 +101,8 @@ export class AssetManager {
 
     private static async loadSounds(): Promise<void> {
         const soundMap: { [key: string]: string } = {
-            'shoot': 'https://yu-1330371299.cos.ap-guangzhou.myqcloud.com/Boom.mp3',
+            'shoot':     'https://yu-1330371299.cos.ap-guangzhou.myqcloud.com/Boom.mp3',
+            'lightning': 'https://yu-1330371299.cos.ap-guangzhou.myqcloud.com/dianjijizhong.mp3',
         };
         await Promise.all(Object.entries(soundMap).map(async ([key, url]) => {
             try {
@@ -120,6 +122,9 @@ export class AssetManager {
         
         // 关键：将 assets/xxx.png 映射到 COS 根目录下的 xxx.png (剥离 assets/ 路径)
         const getPath = (p: string) => {
+            const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            if (isLocal) return p; // 本地开发环境直接读取 assets 目录
+
             const fileName = p.split('/').pop() || p;
             return REMOTE_BASE + fileName;
         };
@@ -137,6 +142,18 @@ export class AssetManager {
             'fish_jelly': 'assets/fish_jelly.png',
             'fish_dragon': 'assets/fish_dragon_serpentine.png',
             'fish_kraken': 'assets/fish_kraken.png',
+            'boss_leviathan': 'assets/boss_leviathan.png',
+            'boss_whale': 'assets/boss_whale.png',
+            'boss_crab': 'assets/boss_crab.png',
+            'boss_manta': 'assets/boss_manta.png',
+            'boss_titan_whale': 'assets/boss_titan_whale.png',
+            'boss_titan_serpent': 'assets/boss_titan_serpent.png',
+            'boss_titan_shark': 'assets/boss_titan_shark.png',
+            'boss_titan_dragon': 'assets/boss_titan_dragon.png',
+            'fish_cyber_shark': 'assets/fish_cyber_shark.png',
+            'fish_bio_piranha': 'assets/fish_bio_piranha.png',
+            'fish_tech_angler': 'assets/fish_tech_angler.png',
+            'fish_railgun_swordfish': 'assets/fish_railgun_swordfish.png',
             'skin_gatling': 'assets/skin_gatling.png',
             'skin_heavy': 'assets/skin_heavy.png',
             'skin_tuna': 'assets/skin_tuna.png',
@@ -221,19 +238,25 @@ export class AssetManager {
         await Promise.all(loadPromises);
     }
 
-    public static playSound(type: string): void {
+    public static playSound(type: string, rate: number = 1, duration?: number, noOverlap: boolean = false): void {
         if (!this.audioCtx) return;
         if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
 
         // 优先播放真实音频 buffer
         if (this.soundBuffers[type]) {
+            const now = this.audioCtx.currentTime;
+            // noOverlap: 若上次仍在播放则跳过，实现持续电流效果
+            if (noOverlap && this.soundEndTimes[type] > now) return;
             const src = this.audioCtx.createBufferSource();
             src.buffer = this.soundBuffers[type];
+            src.playbackRate.value = rate;
             const gain = this.audioCtx.createGain();
             gain.gain.value = 0.4;
             src.connect(gain);
             gain.connect(this.audioCtx.destination);
-            src.start();
+            const playDuration = duration ?? src.buffer.duration;
+            this.soundEndTimes[type] = now + playDuration / rate;
+            src.start(now, 0, duration);
             return;
         }
 

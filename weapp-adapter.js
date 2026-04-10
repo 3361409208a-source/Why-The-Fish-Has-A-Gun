@@ -29,6 +29,20 @@ mainCanvas.width = screenWidth * devicePixelRatio;
 mainCanvas.height = screenHeight * devicePixelRatio;
 _window.canvas = mainCanvas;
 
+// 修复：PIXI v7 auto-detect 第一步检查 globalThis.WebGLRenderingContext
+// 微信小游戏只支持 WebGL1，注入 WebGLRenderingContext 让 PIXI 探测通过
+// 注意：不注入 WebGL2RenderingContext，否则 PIXI 会尝试 getInternalformatParameter 等 WebGL2 API 并崩溃
+try {
+    // 拦截 getContext('webgl2') 强制返回 null，确保 PIXI 只走 WebGL1 路径
+    const _origGetContext = mainCanvas.getContext.bind(mainCanvas);
+    mainCanvas.getContext = (type, opts) => (type === 'webgl2' ? null : _origGetContext(type, opts));
+
+    const _glCtx = mainCanvas.getContext('webgl') || mainCanvas.getContext('experimental-webgl');
+    if (_glCtx && typeof WebGLRenderingContext === 'undefined') {
+        _window.WebGLRenderingContext = _glCtx.constructor;
+    }
+} catch (e) {}
+
 _window.innerWidth = screenWidth;
 _window.innerHeight = screenHeight;
 _window.devicePixelRatio = devicePixelRatio;
@@ -65,6 +79,16 @@ const documentMock = {
             c.addEventListener = c.addEventListener || (() => {});
             c.removeEventListener = c.removeEventListener || (() => {});
             c.getBoundingClientRect = () => ({ left: 0, top: 0, width: screenWidth, height: screenHeight });
+            // 拦截 webgl2；若 WebGL1 失败（PC模拟器第二个canvas不支持）则 proxy 到 mainCanvas
+            const _cOrig = c.getContext.bind(c);
+            c.getContext = (t, o) => {
+                if (t === 'webgl2') return null;
+                const r = _cOrig(t, o);
+                if (!r && (t === 'webgl' || t === 'experimental-webgl')) {
+                    return mainCanvas.getContext(t, o);
+                }
+                return r;
+            };
             return c;
         }
         if (type === 'img' || type === 'image') {

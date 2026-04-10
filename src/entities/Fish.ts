@@ -84,25 +84,61 @@ export class Fish extends PIXI.Sprite {
         let baseScale = 1.0;
 
         if (isBoss) {
-            const hpRoll = 0.1 + Math.random() * 0.9;
+            const hpRoll = 0.5 + Math.random() * 0.5;
             const bossType = Math.random();
-            if (bossType < 0.4) {
+            if (bossType < 0.10) {
+                this.bossKey = 'titan_whale';
+                tex = AssetManager.textures['boss_titan_whale'];
+                const w = tex ? (tex.width || 1024) : 1024;
+                // 缩放调整：从 8.0 降至 4.5，确保横向完整性
+                this.hp = Math.floor(200000 * hpRoll); this.originalSpeed = 0.15; baseScale = 4.5 * (400 / w);
+            } else if (bossType < 0.20) {
+                this.bossKey = 'titan_serpent';
+                tex = AssetManager.textures['boss_titan_serpent'];
+                const w = tex ? (tex.width || 1024) : 1024;
+                this.hp = Math.floor(180000 * hpRoll); this.originalSpeed = 0.4; baseScale = 4.2 * (400 / w);
+            } else if (bossType < 0.30) {
+                this.bossKey = 'titan_shark';
+                tex = AssetManager.textures['boss_titan_shark'];
+                const w = tex ? (tex.width || 1024) : 1024;
+                this.hp = Math.floor(150000 * hpRoll); this.originalSpeed = 0.25; baseScale = 3.8 * (400 / w);
+            } else if (bossType < 0.40) {
+                this.bossKey = 'titan_dragon';
+                tex = AssetManager.textures['boss_titan_dragon'];
+                const w = tex ? (tex.width || 1024) : 1024;
+                this.hp = Math.floor(160000 * hpRoll); this.originalSpeed = 0.35; baseScale = 4.0 * (400 / w);
+            } else if (bossType < 0.50) {
+                this.bossKey = 'leviathan';
+                tex = AssetManager.textures['boss_leviathan'];
+                const w = tex ? (tex.width || 1024) : 1024;
+                this.hp = Math.floor(50000 * hpRoll); this.originalSpeed = 0.3; baseScale = 3.5 * (250 / w);
+            } else if (bossType < 0.60) {
+                this.bossKey = 'whale';
+                tex = AssetManager.textures['boss_whale'];
+                const w = tex ? (tex.width || 1024) : 1024;
+                this.hp = Math.floor(80000 * hpRoll); this.originalSpeed = 0.2; baseScale = 4.2 * (250 / w);
+            } else if (bossType < 0.70) {
+                this.bossKey = 'crab';
+                tex = AssetManager.textures['boss_crab'];
+                const w = tex ? (tex.width || 1024) : 1024;
+                this.hp = Math.floor(40000 * hpRoll); this.originalSpeed = 0.5; baseScale = 3.2 * (200 / w);
+            } else if (bossType < 0.80) {
+                this.bossKey = 'manta';
+                tex = AssetManager.textures['boss_manta'];
+                const w = tex ? (tex.width || 1024) : 1024;
+                this.hp = Math.floor(35000 * hpRoll); this.originalSpeed = 1.2; baseScale = 3.0 * (220 / w);
+            } else if (bossType < 0.90) {
                 this.bossKey = 'dragon';
                 tex = AssetManager.textures['fish_dragon'] || AssetManager.textures['fish_shark'];
                 const w = tex ? (tex.width || 1024) : 1024;
-                this.hp = Math.floor(4800 * hpRoll); this.originalSpeed = 1.1; baseScale = 1.5 * (500 / w);
-            } else if (bossType < 0.7) {
-                this.bossKey = 'kraken';
-                tex = AssetManager.textures['fish_kraken'] || AssetManager.textures['fish_shark'];
-                const w = tex ? (tex.width || 1024) : 1024;
-                this.hp = Math.floor(8000 * hpRoll); this.originalSpeed = 0.4; baseScale = 3.8 * (150 / w);
+                this.hp = Math.floor(15000 * hpRoll); this.originalSpeed = 1.1; baseScale = 2.0 * (200 / w);
             } else {
                 this.bossKey = 'shark';
                 tex = AssetManager.textures['fish_shark'];
                 const w = tex ? (tex.width || 1024) : 1024;
-                this.hp = Math.floor(4000 * hpRoll); this.originalSpeed = 0.6; baseScale = 3.2 * (150 / w);
+                this.hp = Math.floor(10000 * hpRoll); this.originalSpeed = 0.6; baseScale = 2.8 * (180 / w);
             }
-            this.originalSpeed *= (1.0 + (1.0 - hpRoll) * 0.6);
+            this.originalSpeed *= (1.0 + (1.0 - hpRoll) * 0.4);
         } else if (isMinion) {
             this.bossKey = 'minion';
             tex = AssetManager.textures['fish_tuna']; 
@@ -113,17 +149,39 @@ export class Fish extends PIXI.Sprite {
         } else {
             this.bossKey = '';
             const speciesRand = Math.random();
-            if (speciesRand < 0.3) {
-                tex = AssetManager.textures['fish_angler']; this.hp = 20;
-                this.originalSpeed = 1.2;
+            if (speciesRand < 0.15) {
+                // 原有灯笼鱼 -> 升级为 科技狙击灯笼鱼
+                tex = AssetManager.textures['fish_tech_angler'] || AssetManager.textures['fish_angler']; 
+                this.hp = 200; // 稍微更肉一点
+                this.originalSpeed = 1.3;
                 const w = tex ? (tex.width || 1024) : 1024;
-                baseScale = 0.6 * (100 / w);
-            } else if (speciesRand < 0.6) {
+                baseScale = 0.7 * (120 / w);
+            } else if (speciesRand < 0.30) {
+                // 原有水母
                 this.fishType = 'jelly'; tex = AssetManager.textures['fish_jelly']; 
                 this.hp = 50; this.originalSpeed = 0.4;
                 const w = tex ? (tex.width || 1024) : 1024;
                 baseScale = 1.0 * (100 / w);
+            } else if (speciesRand < 0.45) {
+                // 新增：科技食人鱼
+                tex = AssetManager.textures['fish_bio_piranha'];
+                this.hp = 120; this.originalSpeed = 2.0; // 速度快
+                const w = tex ? (tex.width || 1024) : 1024;
+                baseScale = 0.6 * (100 / w);
+            } else if (speciesRand < 0.65) {
+                // 新增：科技武装鲨鱼 (精英)
+                tex = AssetManager.textures['fish_cyber_shark'];
+                this.hp = 500; this.originalSpeed = 0.7;
+                const w = tex ? (tex.width || 1024) : 1024;
+                baseScale = 1.2 * (180 / w);
+            } else if (speciesRand < 0.80) {
+                // 新增：电磁炮剑鱼 (精英)
+                tex = AssetManager.textures['fish_railgun_swordfish'];
+                this.hp = 400; this.originalSpeed = 2.5; // 极速
+                const w = tex ? (tex.width || 1024) : 1024;
+                baseScale = 0.9 * (200 / w);
             } else {
+                // 原有金枪鱼
                 tex = AssetManager.textures['fish_tuna']; this.hp = 100;
                 this.originalSpeed = 0.8;
                 const w = tex ? (tex.width || 1024) : 1024;
@@ -134,7 +192,8 @@ export class Fish extends PIXI.Sprite {
         // 最终兜底，确保 tex 一定存在
         if (!tex) tex = PIXI.Texture.WHITE;
 
-        const segmentCount = (isBoss || isMinion) ? 15 : 8;
+        const isTitan = this.bossKey && this.bossKey.startsWith('titan');
+        const segmentCount = isTitan ? 35 : ((isBoss || isMinion) ? 15 : 8);
         this.meshPoints = [];
         const texW = tex.width || 1024;
         const segmentWidth = texW / (segmentCount - 1);
@@ -238,8 +297,9 @@ export class Fish extends PIXI.Sprite {
                 }
             } else {
                 const dashFactor = (this.isDashing || this.isMinion) ? 0.8 : 0;
-                const baseAmp = (this.bossKey === 'dragon' ? 40 : 12) * (1 + hitFactor * 0.2 + dashFactor * 0.5); 
-                const baseFreq = (this.bossKey === 'dragon' ? 0.35 : 0.6) * (1 + dashFactor * 0.4);
+                const isTitan = this.bossKey && this.bossKey.startsWith('titan');
+                const baseAmp = (this.bossKey === 'dragon' || isTitan ? 35 : 12) * (1 + hitFactor * 0.2 + dashFactor * 0.5); 
+                const baseFreq = (this.bossKey === 'dragon' || isTitan ? 0.25 : 0.6) * (1 + dashFactor * 0.4);
                 for (let i = 0; i < this.meshPoints.length; i++) {
                     this.meshPoints[i].y = Math.sin(t + i * baseFreq) * baseAmp * (0.4 + (i / this.meshPoints.length));
                 }
