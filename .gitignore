@@ -1,6 +1,22 @@
+# 辅助工具隔离
 AI-Image-Processor/
+
+# 前端依赖与构建 (元凶在此！)
+node_modules/
+dist/
+dist_wechat/
+.npm/
+
+# 编译器与 IDE
 bin/
 obj/
+.vs/
+.vscode/
 *.user
 *.pdb
-.vs/
+*.suo
+*.sln.docstates
+
+# 平台特定
+.DS_Store
+Thumbs.db
