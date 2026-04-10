@@ -1,6 +1,8 @@
 import * as PIXI from 'pixi.js';
 import { AssetManager } from '../AssetManager';
 import { SceneManager } from '../SceneManager';
+import { getWeapon } from '../config/weapons.config';
+import { BULLET_LEVEL } from '../config/balance.config';
 
 export class Bullet extends PIXI.Sprite {
     public isActive: boolean = false;
@@ -16,57 +18,26 @@ export class Bullet extends PIXI.Sprite {
         this.anchor.set(0.5);
     }
 
-    public setType(type: string, level: number = 1): void {
+    public setType(type: string, level: number = 1, dmgMult: number = 1.0, speedMult: number = 1.0): void {
         this.level = level;
         
-        // 映射纹理
-        const texMap: {[key: string]: string} = {
-            'cannon_base': 'bullet_v2',
-            'fish_tuna_mode': 'bullet_v2',
-            'gatling': 'bullet_v2',
-            'heavy': 'bullet_v2',
-            'lightning': 'bullet_v2',
-            'railgun': 'bullet_railgun',
-            'void': 'bullet_void',
-            'acid': 'bullet_acid'
-        };
+        const def = getWeapon(type);
+        const baseSpeed = def?.baseSpeed ?? 12;
+        const baseDmg = def?.baseDamage ?? 1;
+        const bulletKey = def?.bulletKey ?? 'bullet_v2';
         
-        this.texture = AssetManager.textures[texMap[type] || 'bullet_v2'];
-        
-        // 恢复正常混合模式
+        this.texture = AssetManager.textures[bulletKey] || AssetManager.textures['bullet_v2'];
         this.blendMode = PIXI.BLEND_MODES.NORMAL;
-        
-        // 基础数值
-        let baseSpeed = 12;
-        let baseDmg = 1;
-        
-        switch(type) {
-            case 'fish_tuna_mode': baseSpeed = 10; baseDmg = 1.5; break;
-            case 'gatling': baseSpeed = 18; baseDmg = 1.2; break;
-            case 'heavy': baseSpeed = 8; baseDmg = 12; break;
-            case 'lightning': baseSpeed = 25; baseDmg = 0.8; break;
-            case 'railgun': baseSpeed = 35; baseDmg = 50; break; // 极速，极大威力
-            case 'void': baseSpeed = 5; baseDmg = 80; break;    // 慢，毁天灭地威力
-            case 'acid': baseSpeed = 15; baseDmg = 40; break;   // 稳步推进
-        }
 
-        const dmgTalent = (window as any).TalentDmgMult || 1.0;
-        const speedTalent = (window as any).TalentSpeedMult || 1.0;
-
-        // 等级加成：每级增加 80% 伤害，20% 速度，15% 尺寸
-        const bonus = (level - 1);
-        // 核心伤害公式调整：强化初始威力至 20 左右，每级固定成长 10 点，而非整体倍率翻倍
-        // 这样可以确保“初始伤害增加”的同时，后期数值不会过于崩坏
-        this.damage = (baseDmg * 20 + bonus * 10) * dmgTalent;
+        const bonus = level - 1;
+        this.damage = (baseDmg * BULLET_LEVEL.damageBase + bonus * BULLET_LEVEL.damagePerLevel) * dmgMult;
         
-        // 关键修复：子弹尺寸增加 2 倍
-        let targetSize = 60 * (1 + bonus * 0.15);
-        if (type === 'void') targetSize *= 2.5; // 黑洞球特别大
+        let targetSize = BULLET_LEVEL.baseSize * (1 + bonus * BULLET_LEVEL.sizePerLevel);
+        if (type === 'void') targetSize *= 2.5;
         
         const originalWidth = (this.texture.width || 1024);
-        const s = targetSize / originalWidth;
-        this.scale.set(s);
-        this.speed = baseSpeed * speedTalent * (1 + bonus * 0.2);
+        this.scale.set(targetSize / originalWidth);
+        this.speed = baseSpeed * speedMult * (1 + bonus * BULLET_LEVEL.speedPerLevel);
     }
 
     public fire(x: number, y: number, angle: number): void {

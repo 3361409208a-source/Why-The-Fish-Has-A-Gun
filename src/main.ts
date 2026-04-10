@@ -37,6 +37,9 @@ import { SceneManager, Layers } from './SceneManager';
 import { GameController } from './GameController';
 import { UIManager } from './UIManager';
 import { SaveManager } from './SaveManager';
+import { getDialogue } from './config/dialogue.config';
+import { getMap } from './config/maps.config';
+import { talentManager } from './core/TalentManager';
 
 /**
  * 游戏入口：深海余烬 (全屏独立页面架构)
@@ -77,15 +80,8 @@ const initGame = async () => {
         document.body.style.background = '#00050a';
     }
 
-    // 2. 将存档中的天赋加成注入到全局 Window，供战斗系统读取
-    const syncTalents = () => {
-        (window as any).TalentDmgMult = SaveManager.getTalentMult('damage');
-        (window as any).TalentFireRateMult = SaveManager.getTalentMult('fireRate');
-        (window as any).TalentGoldMult = SaveManager.getTalentMult('goldBonus');
-        (window as any).TalentCritChance = SaveManager.getTalentMult('critChance');
-        (window as any).TalentSpeedMult = 1.0 + SaveManager.state.talents.fireRate * 0.02; // 子弹飞行速度
-    };
-    syncTalents();
+    // 2. 初始化天赋系统（向后兼容：同时同步到 window，待 Phase3/4 完成后逐步移除）
+    talentManager.syncToWindow();
 
     // 3. 构建加载界面
     const loadingLayer = new PIXI.Container();
@@ -132,40 +128,15 @@ const initGame = async () => {
 
     // 统一的地图切入逻辑（包含剧情对话）
     const onMapSelected = async (config: any) => {
-        // 先切换对应海域的背景
-        SceneManager.setBackground(config.tex || 'bg_ocean');
+        // 先切换对应海域的背景（bgKey来自MapDef）
+        SceneManager.setBackground(config.bgKey || config.tex || 'bg_ocean');
 
         // 进入战斗状态标识
         SceneManager.isGaming = true;
         SceneManager.clearAmbientFishes(); // 立即清理大厅氛围鱼，不带进战斗
 
-        // 收集对应地图的剧情对话
-        let dialogue: any[] = [];
-        if (config.id === 'normal') {
-            dialogue = [
-                { speaker: '深度指挥部', text: '已到达外围海域“孢子温床”，开始环境扫描。', avatar: 'cannon_v3', side: 'left' },
-                { speaker: '驾驶员', text: '收到。这里的异常波动还算稳定。', avatar: 'skin_tuna', side: 'right' },
-                { speaker: '深海安康鱼', text: '……闪烁的光……是食物吗？', avatar: 'fish_angler', side: 'left' },
-                { speaker: '驾驶员', text: '那可不是什么好吃的。那是等离子光束！', avatar: 'skin_tuna', side: 'right' },
-                { speaker: '深度指挥部', text: '准备战斗，清理该区域。', avatar: 'cannon_v3', side: 'left' }
-            ];
-        } else if (config.id === 'hard') {
-            dialogue = [
-                { speaker: '科研部', text: '这里是“辐射深渊”，辐射值已超出表盘阈值。', avatar: 'cannon_v4', side: 'left' },
-                { speaker: '驾驶员', text: '我感觉到这里的海水在沸腾...那些鱼的外壳看起来像是装甲。', avatar: 'skin_jelly', side: 'right' },
-                { speaker: '科研部', text: '那是变异结晶。战胜它们，带回科研样本。', avatar: 'cannon_v4', side: 'left' }
-            ];
-        } else if (config.id === 'lunatic') {
-            dialogue = [
-                { speaker: '神秘信号', text: '警告：核心温度超过临界值。这里不适合任何生命形式。', avatar: 'skin_heavy', side: 'right' },
-                { speaker: '机械鳞龙', text: '……谁在唤醒核心的沉眠？', avatar: 'fish_dragon', side: 'left' },
-                { speaker: '驾驶员', text: '这声音……比传闻中还要让人不舒服。', avatar: 'skin_heavy', side: 'right' },
-                { speaker: '机械鳞龙', text: '你身上的金属……闻起来有英雄的腐臭味。', avatar: 'fish_dragon', side: 'left' },
-                { speaker: '驾驶员', text: '少废话。既然你还没死透，那我就再送你一程！', avatar: 'skin_heavy', side: 'right' },
-                { speaker: '机械鳞龙', text: '毁灭是永恒的恩赐！在余烬中化为虚无吧！', avatar: 'fish_dragon', side: 'left' },
-                { speaker: '深度指挥部', text: '各单位注意：主炮进入超负荷模式，全面开火！', avatar: 'cannon_v3', side: 'right' }
-            ];
-        }
+        // 从配置中读取剧情台词
+        const dialogue = getDialogue(config.id);
 
         // 停止之前的控制器
         if (activeController) {
@@ -184,26 +155,25 @@ const initGame = async () => {
             (window as any)._wxVideo = null;
         }
 
-        if (config.id === 'lunatic' && !isWX) { // 严格限制：微信环境下决不启用 HTML5 Video
-            // 视频背景逻辑 (仅在浏览器环境启用)
-            if (typeof document !== 'undefined' && document.body) {
-                app.renderer.background.alpha = 0;
-                if (document.body.style) document.body.style.background = 'transparent';
-                const video = document.createElement('video');
-                video.id = 'bg-video';
-                video.src = 'https://yu-1330371299.cos.ap-guangzhou.myqcloud.com/map_lunatic.mp4';
-                video.autoplay = true; video.loop = true; video.muted = true; video.playsInline = true;
-                Object.assign(video.style, {
-                    position: 'fixed', top: '0', left: '0',
-                    width: '100%', height: '100%', objectFit: 'cover', zIndex: '-1', 
-                    backgroundColor: '#000'
-                });
-                document.body.insertBefore(video, document.body.firstChild);
-            }
+        // 从配置读取地图定义，获取视频地址
+        const mapDef = getMap(config.id);
+        const videoUrl = !isWX && mapDef?.videoUrl;
+        if (videoUrl && typeof document !== 'undefined' && document.body) {
+            app.renderer.background.alpha = 0;
+            if (document.body.style) document.body.style.background = 'transparent';
+            const video = document.createElement('video');
+            video.id = 'bg-video';
+            video.src = videoUrl;
+            video.autoplay = true; video.loop = true; video.muted = true; video.playsInline = true;
+            Object.assign(video.style, {
+                position: 'fixed', top: '0', left: '0',
+                width: '100%', height: '100%', objectFit: 'cover', zIndex: '-1',
+                backgroundColor: '#000'
+            });
+            document.body.insertBefore(video, document.body.firstChild);
         } else {
-            // 普通场景处理，微信即便进入疯狂模式也使用图片背景 (避免 API 冲突)
             app.renderer.background.alpha = 1;
-            SceneManager.setBackground(config.tex || 'bg_ocean');
+            SceneManager.setBackground(config.bgKey || config.tex || 'bg_ocean');
         }
         
         // 启动新控制器 (传入完成后返回菜单的回调)
@@ -213,11 +183,10 @@ const initGame = async () => {
             SceneManager.setBackground('bg_ocean'); 
         });
 
-        syncTalents();
+        talentManager.syncToWindow();
     };
 
     // 7. 进入游戏流程
-    SceneManager.init(app);
     UIManager.init(app, onMapSelected);
 
     // 初始设置背景
