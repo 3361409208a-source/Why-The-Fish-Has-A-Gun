@@ -23,6 +23,7 @@ export class SceneManager {
     private static layers: Map<string, PIXI.Container> = new Map();
     private static bgSprite: PIXI.Sprite | null = null;
     private static isTiled: boolean = false;
+    public static isGaming: boolean = false;
 
     private static underwaterFilter: PIXI.Filter | null = null;
     private static filterTime: number = 0;
@@ -227,16 +228,31 @@ export class SceneManager {
     }
 
     /**
+     * 清理所有背景氛围鱼
+     */
+    public static clearAmbientFishes(): void {
+        const bgLayer = this.getLayer(Layers.Background);
+        if (!bgLayer) return;
+
+        this.ambientFishes.forEach(fish => {
+            bgLayer.removeChild(fish);
+        });
+        this.ambientFishes = [];
+        this.ambientSpawnTimer = 0;
+    }
+
+    /**
      * 更新大厅背景氛围鱼群
      */
     private static updateAmbientFishes(delta: number): void {
-        // 只有在大厅显示地图选择时，或者没有进行战斗时才显示背景鱼
-        // 通过简单的频率控制生成
-        this.ambientSpawnTimer += delta;
-        if (this.ambientSpawnTimer > 180) { // 大约每 3 秒尝试生成
-            this.ambientSpawnTimer = 0;
-            if (this.ambientFishes.length < 12) { // 限制背景鱼数量，避免杂乱
-                this.spawnAmbientFish();
+        // 只有在大厅且没有进行战斗时才生成背景鱼
+        if (!this.isGaming) {
+            this.ambientSpawnTimer += delta;
+            if (this.ambientSpawnTimer > 180) { // 大约每 3 秒尝试生成
+                this.ambientSpawnTimer = 0;
+                if (this.ambientFishes.length < 12) { 
+                    this.spawnAmbientFish();
+                }
             }
         }
 

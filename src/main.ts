@@ -135,6 +135,10 @@ const initGame = async () => {
         // 先切换对应海域的背景
         SceneManager.setBackground(config.tex || 'bg_ocean');
 
+        // 进入战斗状态标识
+        SceneManager.isGaming = true;
+        SceneManager.clearAmbientFishes(); // 立即清理大厅氛围鱼，不带进战斗
+
         // 收集对应地图的剧情对话
         let dialogue: any[] = [];
         if (config.id === 'normal') {
@@ -204,6 +208,7 @@ const initGame = async () => {
         
         // 启动新控制器 (传入完成后返回菜单的回调)
         activeController = new GameController(app, config, dialogue, () => {
+            SceneManager.isGaming = false; // 返回大厅，回显氛围鱼
             UIManager.showMapSelection(onMapSelected);
             SceneManager.setBackground('bg_ocean'); 
         });
@@ -217,9 +222,6 @@ const initGame = async () => {
 
     // 初始设置背景
     SceneManager.setBackground('bg_ocean');
-
-    // 7. 进入游戏流程
-    UIManager.init(app, onMapSelected);
 
     console.log('Game Started with Global Upgrades');
 };

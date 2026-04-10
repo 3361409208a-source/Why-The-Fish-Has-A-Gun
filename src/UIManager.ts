@@ -63,7 +63,10 @@ export class UIManager {
         uiLayer.addChild(this.scoreText);
 
         this.initComboUI(uiLayer);
-        this.initShop(); // 如果有商城初始化代码
+        this.initShop(); 
+
+        // 默认进入大厅
+        this.showMapSelection(onMapSelected);
     }
     
     public static hideAll(): void {
@@ -767,10 +770,10 @@ export class UIManager {
                         container.alpha -= 0.1 * delta;
                         if (container.alpha <= 0) { 
                             storyLayer.removeChild(container); 
-                            // 恢复界面层
+                            // 恢复界面层 (恢复战斗必要的HUD与商店)
                             uiLayer.visible = true;
-                            this.shopContainer.visible = true;
                             this.scoreText.visible = true;
+                            this.shopContainer.visible = true; // 战斗中的武器选择UI依赖此容器
                             resolve(); 
                         }
                     });
