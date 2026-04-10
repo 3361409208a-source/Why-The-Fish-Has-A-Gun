@@ -20,11 +20,16 @@ export class CombatSystem {
             if (!b.isActive) continue;
             for (const f of this.ctx.fishes) {
                 if (!f.isActive) continue;
-                const dx = Math.abs(b.x - f.x);
-                const dy = Math.abs(b.y - f.y);
-                const hitW = (Math.abs(f.width) / 2) * 0.8;
-                const hitH = (Math.abs(f.height) / 2) * 0.8;
-                if (dx < hitW && dy < hitH) {
+                const dx = b.x - f.x;
+                const dy = b.y - f.y;
+                const distSq = dx * dx + dy * dy;
+                
+                // 核心修正：使用“鱼身最小侧”（通常是高度，即厚度）的一半作为判定基础
+                // 同时加入 0.6 的收缩系数，确保子弹必须“碰肉”才爆
+                const baseSize = Math.min(Math.abs(f.width), Math.abs(f.height));
+                const hitRadius = (baseSize / 2) * 0.65; 
+                
+                if (distSq < hitRadius * hitRadius) {
                     b.kill();
                     const id = this.ctx.unlockedWeapons[this.ctx.currentWeaponIndex];
                     const lvl = this.ctx.weaponLevels[id] || 1;

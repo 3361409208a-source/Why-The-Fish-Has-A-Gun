@@ -53,6 +53,7 @@ export class SpawnSystem {
     }
 
     spawnFish(preferredY?: number, preferredX?: number): void {
+        const isBoss = Math.random() < 0.005 * this.ctx.spawnRate;
         const sideRoll = Math.random();
         let side: 'left' | 'right' = Math.random() > 0.5 ? 'left' : 'right';
         let x: number, y: number;
@@ -60,19 +61,21 @@ export class SpawnSystem {
         if (preferredX !== undefined && preferredY !== undefined) {
             x = preferredX; y = preferredY;
         } else {
-            if (sideRoll < 0.35) { side = 'left'; x = -300; y = 100 + Math.random() * (SceneManager.height - 300); }
-            else if (sideRoll < 0.7) { side = 'right'; x = SceneManager.width + 300; y = 100 + Math.random() * (SceneManager.height - 300); }
-            else if (sideRoll < 0.85) { x = 100 + Math.random() * (SceneManager.width - 200); y = -300; }
+            // 如果是 Boss，强制只能在左右两侧出生 (sideRoll 只有在 < 0.7 时才会进入左右逻辑)
+            const roll = isBoss ? (sideRoll * 0.7) : sideRoll;
+            if (roll < 0.35) { side = 'left'; x = -300; y = 100 + Math.random() * (SceneManager.height - 300); }
+            else if (roll < 0.7) { side = 'right'; x = SceneManager.width + 300; y = 100 + Math.random() * (SceneManager.height - 300); }
+            else if (roll < 0.85) { x = 100 + Math.random() * (SceneManager.width - 200); y = -300; }
             else { x = 100 + Math.random() * (SceneManager.width - 200); y = SceneManager.height + 300; }
         }
 
-        const isSchool = Math.random() < 0.15 && preferredX === undefined;
+        // Boss 不加入鱼群，鱼群仅限普通鱼类
+        const isSchool = !isBoss && Math.random() < 0.15 && preferredX === undefined;
         const schoolSize = isSchool ? 8 + Math.floor(Math.random() * 8) : 1;
         const groupTargetX = SceneManager.width / 2 + (Math.random() - 0.5) * 600;
         const groupTargetY = SceneManager.height / 2 + (Math.random() - 0.5) * 400;
 
         for (let i = 0; i < schoolSize; i++) {
-            const isBoss = Math.random() < 0.005 * this.ctx.spawnRate;
             const fish = this.ctx.pool.get('fish', () => new Fish());
             if (fish) {
                 (window as any).DmgMultCurrent = this.ctx.hpMultiplier;

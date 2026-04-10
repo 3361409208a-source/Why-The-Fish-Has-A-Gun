@@ -76,13 +76,14 @@ export class SceneManager {
 
     public static init(app: PIXI.Application): void {
         this.app = app;
+        this.app.stage.sortableChildren = true; // 开启阶段排序支持
         
         // 1. 按层级顺序初始化容器
-        this.createLayer(Layers.Background); // 最底层
-        this.createLayer(Layers.Game);        // 鱼群
-        this.createLayer(Layers.Bullet);      // 子弹（在鱼上方）
-        this.createLayer(Layers.FX);          // 粒子特效
-        this.createLayer(Layers.UI);          // 最顶层
+        this.createLayer(Layers.Background, 0); // 最底层
+        this.createLayer(Layers.Game, 10);      // 鱼群
+        this.createLayer(Layers.Bullet, 20);    // 子弹（强制在鱼上方）
+        this.createLayer(Layers.FX, 30);        // 粒子特效
+        this.createLayer(Layers.UI, 100);       // 最顶层
 
         this.applyResize();
         window.addEventListener('resize', () => this.applyResize());
@@ -134,8 +135,9 @@ export class SceneManager {
         this.bubbles.push(b);
     }
 
-    private static createLayer(name: string): void {
+    private static createLayer(name: string, z: number): void {
         const container = new PIXI.Container();
+        container.zIndex = z;
         this.layers.set(name, container);
         this.app.stage.addChild(container);
     }

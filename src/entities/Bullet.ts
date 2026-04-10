@@ -52,7 +52,8 @@ export class Bullet extends PIXI.Sprite {
             if (this.arcGfx) this.arcGfx.visible = false;
             let targetSize = BULLET_LEVEL.baseSize * (1 + (level - 1) * BULLET_LEVEL.sizePerLevel);
             if (type === 'void') targetSize *= 2.5;
-            this.scale.set(targetSize / (this.texture.width || 1024));
+            this.scale.set(targetSize / (this.texture.width || 1024) * 1.5); 
+            this.blendMode = PIXI.BLEND_MODES.ADD; 
         }
 
         const bonus = level - 1;
