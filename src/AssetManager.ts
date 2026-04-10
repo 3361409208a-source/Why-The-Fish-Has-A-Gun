@@ -6,6 +6,7 @@ import * as PIXI from 'pixi.js';
 export class AssetManager {
     public static textures: { [key: string]: PIXI.Texture } = {};
     private static audioCtx: AudioContext;
+    private static soundBuffers: { [key: string]: AudioBuffer } = {};
 
     public static async init(renderer: PIXI.Renderer, onProgress?: (p: number) => void): Promise<void> {
         console.log('Starting asset initialization...');
@@ -16,7 +17,10 @@ export class AssetManager {
             }
 
             this.generateTextures(renderer);
-            await this.loadExternalAssets(onProgress);
+            await Promise.all([
+                this.loadExternalAssets(onProgress),
+                this.loadSounds(),
+            ]);
 
             console.log('Asset Manager Initialized Successfully');
         } catch (error: any) {
@@ -92,6 +96,21 @@ export class AssetManager {
         Object.entries(this.textures).forEach(([name, tex]) => {
             if (!PIXI.Cache.has(name)) PIXI.Texture.addToCache(tex, name);
         });
+    }
+
+    private static async loadSounds(): Promise<void> {
+        const soundMap: { [key: string]: string } = {
+            'shoot': 'https://yu-1330371299.cos.ap-guangzhou.myqcloud.com/Boom.mp3',
+        };
+        await Promise.all(Object.entries(soundMap).map(async ([key, url]) => {
+            try {
+                const res = await fetch(url);
+                const buf = await res.arrayBuffer();
+                this.soundBuffers[key] = await this.audioCtx.decodeAudioData(buf);
+            } catch (e) {
+                console.warn(`Sound load failed [${key}]:`, e);
+            }
+        }));
     }
 
     private static async loadExternalAssets(onProgress?: (p: number) => void): Promise<void> {
@@ -205,6 +224,19 @@ export class AssetManager {
     public static playSound(type: string): void {
         if (!this.audioCtx) return;
         if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+
+        // 优先播放真实音频 buffer
+        if (this.soundBuffers[type]) {
+            const src = this.audioCtx.createBufferSource();
+            src.buffer = this.soundBuffers[type];
+            const gain = this.audioCtx.createGain();
+            gain.gain.value = 0.4;
+            src.connect(gain);
+            gain.connect(this.audioCtx.destination);
+            src.start();
+            return;
+        }
+
         const osc = this.audioCtx.createOscillator();
         const gain = this.audioCtx.createGain();
         osc.connect(gain); gain.connect(this.audioCtx.destination);
