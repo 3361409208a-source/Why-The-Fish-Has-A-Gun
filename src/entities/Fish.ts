@@ -87,56 +87,55 @@ export class Fish extends PIXI.Sprite {
             const hpRoll = 0.5 + Math.random() * 0.5;
             const bossType = Math.random();
             if (bossType < 0.10) {
+                this.bossKey = 'boss_gg';
+                tex = AssetManager.textures['boss_gg'];
+                const w = tex ? (tex.width || 1024) : 1024;
+                this.hp = Math.floor(250000 * hpRoll); this.originalSpeed = 0.3; baseScale = 5.0 * (400 / w);
+            } else if (bossType < 0.20) {
                 this.bossKey = 'titan_whale';
                 tex = AssetManager.textures['boss_titan_whale'];
                 const w = tex ? (tex.width || 1024) : 1024;
-                // 缩放调整：从 8.0 降至 4.5，确保横向完整性
                 this.hp = Math.floor(200000 * hpRoll); this.originalSpeed = 0.15; baseScale = 4.5 * (400 / w);
-            } else if (bossType < 0.20) {
+            } else if (bossType < 0.30) {
                 this.bossKey = 'titan_serpent';
                 tex = AssetManager.textures['boss_titan_serpent'];
                 const w = tex ? (tex.width || 1024) : 1024;
                 this.hp = Math.floor(180000 * hpRoll); this.originalSpeed = 0.4; baseScale = 4.2 * (400 / w);
-            } else if (bossType < 0.30) {
+            } else if (bossType < 0.40) {
                 this.bossKey = 'titan_shark';
                 tex = AssetManager.textures['boss_titan_shark'];
                 const w = tex ? (tex.width || 1024) : 1024;
                 this.hp = Math.floor(150000 * hpRoll); this.originalSpeed = 0.25; baseScale = 3.8 * (400 / w);
-            } else if (bossType < 0.40) {
+            } else if (bossType < 0.50) {
                 this.bossKey = 'titan_dragon';
                 tex = AssetManager.textures['boss_titan_dragon'];
                 const w = tex ? (tex.width || 1024) : 1024;
                 this.hp = Math.floor(160000 * hpRoll); this.originalSpeed = 0.35; baseScale = 4.0 * (400 / w);
-            } else if (bossType < 0.50) {
+            } else if (bossType < 0.60) {
                 this.bossKey = 'leviathan';
                 tex = AssetManager.textures['boss_leviathan'];
                 const w = tex ? (tex.width || 1024) : 1024;
                 this.hp = Math.floor(50000 * hpRoll); this.originalSpeed = 0.3; baseScale = 3.5 * (250 / w);
-            } else if (bossType < 0.60) {
+            } else if (bossType < 0.70) {
                 this.bossKey = 'whale';
                 tex = AssetManager.textures['boss_whale'];
                 const w = tex ? (tex.width || 1024) : 1024;
                 this.hp = Math.floor(80000 * hpRoll); this.originalSpeed = 0.2; baseScale = 4.2 * (250 / w);
-            } else if (bossType < 0.70) {
+            } else if (bossType < 0.80) {
                 this.bossKey = 'crab';
                 tex = AssetManager.textures['boss_crab'];
                 const w = tex ? (tex.width || 1024) : 1024;
                 this.hp = Math.floor(40000 * hpRoll); this.originalSpeed = 0.5; baseScale = 3.2 * (200 / w);
-            } else if (bossType < 0.80) {
+            } else if (bossType < 0.90) {
                 this.bossKey = 'manta';
                 tex = AssetManager.textures['boss_manta'];
                 const w = tex ? (tex.width || 1024) : 1024;
                 this.hp = Math.floor(35000 * hpRoll); this.originalSpeed = 1.2; baseScale = 3.0 * (220 / w);
-            } else if (bossType < 0.90) {
+            } else {
                 this.bossKey = 'dragon';
                 tex = AssetManager.textures['fish_dragon'] || AssetManager.textures['fish_shark'];
                 const w = tex ? (tex.width || 1024) : 1024;
                 this.hp = Math.floor(15000 * hpRoll); this.originalSpeed = 1.1; baseScale = 2.0 * (200 / w);
-            } else {
-                this.bossKey = 'shark';
-                tex = AssetManager.textures['fish_shark'];
-                const w = tex ? (tex.width || 1024) : 1024;
-                this.hp = Math.floor(10000 * hpRoll); this.originalSpeed = 0.6; baseScale = 2.8 * (180 / w);
             }
             this.originalSpeed *= (1.0 + (1.0 - hpRoll) * 0.4);
         } else if (isMinion) {

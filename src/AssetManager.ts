@@ -150,6 +150,7 @@ export class AssetManager {
             'boss_titan_serpent': 'assets/boss_titan_serpent.png',
             'boss_titan_shark': 'assets/boss_titan_shark.png',
             'boss_titan_dragon': 'assets/boss_titan_dragon.png',
+            'boss_gg': 'assets/boss_gg.png',
             'fish_cyber_shark': 'assets/fish_cyber_shark.png',
             'fish_bio_piranha': 'assets/fish_bio_piranha.png',
             'fish_tech_angler': 'assets/fish_tech_angler.png',
