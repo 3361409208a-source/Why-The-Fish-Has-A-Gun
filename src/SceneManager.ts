@@ -219,8 +219,78 @@ export class SceneManager {
         }
     }
 
+    private static ambientFishes: PIXI.Sprite[] = [];
+    private static ambientSpawnTimer: number = 0;
+
     public static update(delta: number): void {
-        // 全局动画逻辑可在此扩展
+        this.updateAmbientFishes(delta);
+    }
+
+    /**
+     * 更新大厅背景氛围鱼群
+     */
+    private static updateAmbientFishes(delta: number): void {
+        // 只有在大厅显示地图选择时，或者没有进行战斗时才显示背景鱼
+        // 通过简单的频率控制生成
+        this.ambientSpawnTimer += delta;
+        if (this.ambientSpawnTimer > 180) { // 大约每 3 秒尝试生成
+            this.ambientSpawnTimer = 0;
+            if (this.ambientFishes.length < 12) { // 限制背景鱼数量，避免杂乱
+                this.spawnAmbientFish();
+            }
+        }
+
+        const bgLayer = this.layers.get(Layers.Background);
+        if (!bgLayer) return;
+
+        for (let i = this.ambientFishes.length - 1; i >= 0; i--) {
+            const fish = this.ambientFishes[i];
+            const speed = (fish as any)._speed || 1;
+            const side = (fish as any)._side || 1;
+            
+            fish.x += speed * side * delta;
+            // 微微上下波浮动
+            fish.y += Math.sin(Date.now() * 0.001 + i) * 0.2 * delta;
+
+            // 超出边界移除
+            if (side > 0 && fish.x > this.width + 200) {
+                bgLayer.removeChild(fish);
+                this.ambientFishes.splice(i, 1);
+            } else if (side < 0 && fish.x < -200) {
+                bgLayer.removeChild(fish);
+                this.ambientFishes.splice(i, 1);
+            }
+        }
+    }
+
+    private static spawnAmbientFish(): void {
+        const bgLayer = this.layers.get(Layers.Background);
+        if (!bgLayer) return;
+
+        const types = ['fish_tuna', 'fish_jelly', 'fish_angler'];
+        const type = types[Math.floor(Math.random() * types.length)];
+        const tex = AssetManager.textures[type] || PIXI.Texture.WHITE;
+        
+        const fish = new PIXI.Sprite(tex);
+        const side = Math.random() > 0.5 ? 1 : -1;
+        
+        fish.x = side > 0 ? -150 : this.width + 150;
+        fish.y = 100 + Math.random() * (this.height - 200);
+        fish.alpha = 0.3 + Math.random() * 0.3; // 较淡，作为背景
+        
+        const scale = 0.2 + Math.random() * 0.2;
+        fish.scale.set(side > 0 ? -scale : scale, scale); // 翻转朝向
+        
+        (fish as any)._speed = 0.5 + Math.random() * 1.2;
+        (fish as any)._side = side;
+        
+        bgLayer.addChild(fish);
+        // 确保鱼在背景图层上方，但在 UI 之下
+        if (this.bgSprite) {
+            bgLayer.setChildIndex(fish, bgLayer.children.length - 1);
+        }
+        
+        this.ambientFishes.push(fish);
     }
 
     public static shake(intensity: number = 5, duration: number = 200): void {

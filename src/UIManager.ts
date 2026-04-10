@@ -19,8 +19,9 @@ export class UIManager {
     private static comboText: PIXI.Text;
     private static comboValue: number = 0;
     private static comboLabel: PIXI.Text; // 将 label 提升为静态属性以便动画
-    private static HUDLayer: PIXI.Container;
     private static activeTab: string = 'lobby';
+    private static container: PIXI.Container;
+    private static sideHUDContainer: PIXI.Container;
     
     // 格式化数字：10000 -> 1万, 100000000 -> 1亿
     public static formatNumber(num: number): string {
@@ -29,30 +30,47 @@ export class UIManager {
         return num.toString();
     }
 
-    public static init(app: PIXI.Application): void {
+    public static init(app: PIXI.Application, onMapSelected: (config: any) => void): void {
         this.app = app;
-        const uiLayer = SceneManager.getLayer(Layers.UI);
+        this.currentOnMapSelected = onMapSelected;
         
-        // 主界面容器
-        this.menuContainer = new PIXI.Container();
-        uiLayer.addChild(this.menuContainer);
+        // UI 总图层
+        const uiLayer = SceneManager.getLayer(Layers.UI);
+        this.container = new PIXI.Container();
+        uiLayer.addChild(this.container);
 
-        // 页面内容承载容器
+        // 各级功能容器
+        this.menuContainer = new PIXI.Container();
+        this.container.addChild(this.menuContainer);
+
         this.mainPageContainer = new PIXI.Container();
         this.menuContainer.addChild(this.mainPageContainer);
 
-        // 底部导航栏
+        this.sideHUDContainer = new PIXI.Container();
+        this.menuContainer.addChild(this.sideHUDContainer);
+
         this.navContainer = new PIXI.Container();
         this.menuContainer.addChild(this.navContainer);
 
-        this.scoreText = new PIXI.Text('晶体: 0', {
-            fontFamily: 'Verdana', fontSize: 28, fill: 0xffffff, stroke: '#000000', strokeThickness: 4
+        this.shopContainer = new PIXI.Container();
+        this.container.addChild(this.shopContainer);
+
+        // 基础 UI 初始化
+        this.scoreText = new PIXI.Text('CREDITS: 0', {
+            fontSize: 28, fill: 0xffcc00, fontWeight: 'bold'
         });
         this.scoreText.x = 20; this.scoreText.y = 20; this.scoreText.visible = false; 
         uiLayer.addChild(this.scoreText);
 
         this.initComboUI(uiLayer);
-        this.initShop();
+        this.initShop(); // 如果有商城初始化代码
+    }
+    
+    public static hideAll(): void {
+        if (this.menuContainer) this.menuContainer.visible = false;
+        if (this.shopContainer) this.shopContainer.visible = false;
+        if (this.scoreText) this.scoreText.visible = false;
+        if (this.comboContainer) this.comboContainer.visible = false;
     }
 
     private static initComboUI(parent: PIXI.Container): void {

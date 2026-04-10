@@ -121,9 +121,13 @@ const initGame = async () => {
         }
     });
 
-    SceneManager.init(app);
-    UIManager.init(app);
+    // 6. 全局更新循环
+    app.ticker.add((delta) => {
+        SceneManager.update(delta);
+    });
 
+    // 7. 进入游戏流程
+    SceneManager.init(app);
     let activeController: GameController | null = null;
 
     // 统一的地图切入逻辑（包含剧情对话）
@@ -143,12 +147,9 @@ const initGame = async () => {
             ];
         } else if (config.id === 'hard') {
             dialogue = [
-                { speaker: '驾驶员', text: '这片海域的辐射值太高了，雷达几乎完全失效。', avatar: 'skin_gatling', side: 'right' },
-                { speaker: '机械巨鲨', text: '鲜活的意志……多久没闻到这种味道了。', avatar: 'fish_shark', side: 'left' },
-                { speaker: '驾驶员', text: '别在那儿装神弄鬼。我知道你就在废船残骸后面！', avatar: 'skin_gatling', side: 'right' },
-                { speaker: '机械巨鲨', text: '哈哈哈哈！你的愤怒只会加速你的腐烂，小虫子。', avatar: 'fish_shark', side: 'left' },
-                { speaker: '驾驶员', text: '加特林预热完毕。让我看看你的钢板有多厚！', avatar: 'skin_gatling', side: 'right' },
-                { speaker: '机械巨鲨', text: '那就来吧……在死寂中痛苦挣扎吧！', avatar: 'fish_shark', side: 'left' }
+                { speaker: '科研部', text: '这里是“辐射深渊”，辐射值已超出表盘阈值。', avatar: 'cannon_v4', side: 'left' },
+                { speaker: '驾驶员', text: '我感觉到这里的海水在沸腾...那些鱼的外壳看起来像是装甲。', avatar: 'skin_jelly', side: 'right' },
+                { speaker: '科研部', text: '那是变异结晶。战胜它们，带回科研样本。', avatar: 'cannon_v4', side: 'left' }
             ];
         } else if (config.id === 'lunatic') {
             dialogue = [
@@ -162,15 +163,18 @@ const initGame = async () => {
             ];
         }
 
-        // 销毁旧控制器
-        // 收集对话完毕，销毁旧控制器
-        if (activeController) activeController.destroy();
-        
-        // 清理旧的视频背景
-        if (typeof document !== 'undefined' && typeof document.getElementById === 'function') {
-            const oldVideo = document.getElementById('bg-video');
-            if (oldVideo) oldVideo.remove();
+        // 停止之前的控制器
+        if (activeController) {
+            activeController.destroy();
+            activeController = null;
         }
+
+        // 清理 UI (隐藏菜单)
+        UIManager.hideAll();
+        
+        // 渲染器清理（防止视频残留）
+        const video = document.getElementById('bg-video');
+        if (video) video.remove();
         if (isWX && (window as any)._wxVideo) {
             (window as any)._wxVideo.destroy();
             (window as any)._wxVideo = null;
@@ -207,11 +211,15 @@ const initGame = async () => {
         syncTalents();
     };
 
+    // 7. 进入游戏流程
+    SceneManager.init(app);
+    UIManager.init(app, onMapSelected);
+
     // 初始设置背景
     SceneManager.setBackground('bg_ocean');
 
-    // 初始显示地图选择
-    UIManager.showMapSelection(onMapSelected);
+    // 7. 进入游戏流程
+    UIManager.init(app, onMapSelected);
 
     console.log('Game Started with Global Upgrades');
 };
