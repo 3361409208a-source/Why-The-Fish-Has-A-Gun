@@ -34,7 +34,7 @@ export class SceneManager {
         if (typeof source === 'string') {
             // 关键修复：不要直接使用 PIXI.Texture.from，它在微信端会触发 Illegal constructor
             // 使用已经预加载好的 AssetManager.textures
-            const tex = AssetManager.textures[source] || PIXI.Texture.WHITE;
+            const tex = AssetManager.textures[source] || PIXI.Texture.EMPTY;
             if (!this.bgSprite) {
                 this.bgSprite = new PIXI.Sprite(tex);
                 bgLayer.addChild(this.bgSprite);

@@ -41,7 +41,7 @@ export const MAPS: MapDef[] = [
         name: '余烬核心',
         difficulty: '疯狂',
         bgKey: 'map_lunatic',
-        videoUrl: 'https://yu-1330371299.cos.ap-guangzhou.myqcloud.com/map_lunatic.mp4',
+        videoUrl: 'assets/map_lunatic.mp4',
         hpMult: 30.0,
         spawnRate: 4.0,
         reward: 25.0,

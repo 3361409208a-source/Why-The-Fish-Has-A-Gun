@@ -169,26 +169,42 @@ const initGame = async () => {
             (window as any)._wxVideo = null;
         }
 
+        // 先统一设置静态背景图（保底方案）
+        SceneManager.setBackground(config.bgKey || config.tex || 'bg_ocean');
+
         // 从配置读取地图定义，获取视频地址
         const mapDef = getMap(config.id);
         const videoUrl = !isWX && mapDef?.videoUrl;
+        
         if (videoUrl && typeof document !== 'undefined' && document.body) {
-            app.renderer.background.alpha = 0;
-            if (document.body.style) document.body.style.background = 'transparent';
             const video = document.createElement('video');
             video.id = 'bg-video';
             video.src = videoUrl;
             video.autoplay = true; video.loop = true; video.muted = true; video.playsInline = true;
             Object.assign(video.style, {
                 position: 'fixed', top: '0', left: '0',
-                width: '100%', height: '100%', objectFit: 'cover', zIndex: '-1',
+                width: '100%', height: '100%', objectFit: 'cover', zIndex: '1',
                 backgroundColor: '#000'
             });
+
+            // 只有当视频正式开始播放时，才隐藏 PIXI 静态背景，实现无缝切换
+            video.onplaying = () => {
+                app.renderer.background.alpha = 0;
+                SceneManager.setBackground(''); 
+                if (document.body.style) document.body.style.background = 'transparent';
+            };
+            
             document.body.insertBefore(video, document.body.firstChild);
+            video.play().catch(e => {
+                console.warn('Video autoplay failed, staying with static image:', e);
+            });
         } else {
             app.renderer.background.alpha = 1;
-            SceneManager.setBackground(config.bgKey || config.tex || 'bg_ocean');
         }
+
+
+
+
         
         // 启动新控制器 (传入完成后返回菜单的回调)
         activeController = new GameController(app, config, dialogue, () => {
