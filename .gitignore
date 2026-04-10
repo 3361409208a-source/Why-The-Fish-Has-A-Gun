@@ -4,6 +4,7 @@ AI-Image-Processor/
 # 前端依赖与构建 (元凶在此！)
 node_modules/
 dist/
+dist_h5/
 dist_wechat/
 .npm/
 
