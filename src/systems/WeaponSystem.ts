@@ -132,23 +132,23 @@ export class WeaponSystem {
             ? { x: this.ctx.cannon.x, y: this.ctx.cannon.y }
             : this.ctx.cannon.getMuzzlePosition();
 
-        // 闪电武器：手动瞄准时找最靠近炮台指向方向的鱼，自动模式找最近的鱼
+        // 闪电武器：射线与鱼碰撞体求交，取射线上最近的命中鱼（不自动追踪）
         let lightningTarget = undefined;
         if (id === 'lightning') {
-            if (this.ctx.isManualAiming) {
-                // 找最靠近玩家触摸/点击位置的鱼
-                let minDist = Infinity;
-                for (const f of this.ctx.fishes) {
-                    if (!f.isActive) continue;
-                    const d = Math.hypot(f.x - this.ctx.manualAimX, f.y - this.ctx.manualAimY);
-                    if (d < minDist) { minDist = d; lightningTarget = f; }
-                }
-            } else {
-                let minDist = Infinity;
-                for (const f of this.ctx.fishes) {
-                    if (!f.isActive) continue;
-                    const d = Math.hypot(f.x - this.ctx.cannon.x, f.y - this.ctx.cannon.y);
-                    if (d < minDist) { minDist = d; lightningTarget = f; }
+            const aimAngle = this.ctx.cannon.getFireAngle();
+            const aimDx = Math.cos(aimAngle);
+            const aimDy = Math.sin(aimAngle);
+            let minDot = Infinity;
+            for (const f of this.ctx.fishes) {
+                if (!f.isActive) continue;
+                const dx = f.x - this.ctx.cannon.x;
+                const dy = f.y - this.ctx.cannon.y;
+                const dot = dx * aimDx + dy * aimDy;
+                if (dot <= 0) continue; // 炮台背后跳过
+                const perp = Math.abs(dx * aimDy - dy * aimDx); // 鱼心到射线的垂直距离
+                if (perp <= f.hitRadius && dot < minDot) { // 射线穿过鱼体，取最近的
+                    minDot = dot;
+                    lightningTarget = f;
                 }
             }
         }
