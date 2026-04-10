@@ -1,9 +1,36 @@
 import * as PIXI from 'pixi.js';
 import '@pixi/unsafe-eval';
 
-// 强制跳过渲染检测
+// 强制跳过渲染检测与适配微信环境
 PIXI.settings.PREFER_ENV = PIXI.ENV.WEBGL_LEGACY;
 PIXI.BaseTexture.defaultOptions.alphaMode = PIXI.ALPHA_MODES.NO_PREMULTIPLIED_ALPHA;
+(PIXI.settings as any).FAIL_IF_MAJOR_PERFORMANCE_CAVEAT = false; // 微信端有时会触发这个导致初始化失败
+(PIXI.settings as any).CREATE_IMAGE_BITMAP = false; // 微信端不支持 ImageBitmap 加载方式，必须禁用
+
+// 3. [纠极修复]：直接修正 PIXI 资源探测器的静态测试方法
+// 这比注册 Extension 更稳健，能彻底解决 "Unrecognized source type" 报错
+try {
+    const _ImageResource = (PIXI as any).ImageResource;
+    const _CanvasResource = (PIXI as any).CanvasResource;
+    
+    if (_ImageResource) {
+        const oldTest = _ImageResource.test;
+        _ImageResource.test = (source: any) => {
+            if (source && (source.tagName === 'IMG' || (source.constructor && source.constructor.name === 'Image'))) return true;
+            return oldTest ? oldTest(source) : false;
+        };
+    }
+    
+    if (_CanvasResource) {
+        const oldTest = _CanvasResource.test;
+        _CanvasResource.test = (source: any) => {
+            if (source && (source.tagName === 'CANVAS' || (source.constructor && source.constructor.name === 'Canvas'))) return true;
+            return oldTest ? oldTest(source) : false;
+        };
+    }
+} catch (e) {
+    console.warn('Failed to patch PIXI resource detectors', e);
+}
 
 import { AssetManager } from './AssetManager';
 import { SceneManager, Layers } from './SceneManager';
@@ -12,69 +39,16 @@ import { UIManager } from './UIManager';
 import { SaveManager } from './SaveManager';
 
 /**
- * 环境补丁：适配微信小游戏等非标准浏览器环境
- */
-if (typeof (window as any).wx !== 'undefined') {
-    const _window = window as any;
-    // 0. 基础环境补丁
-    if (!_window.requestAnimationFrame) {
-        _window.requestAnimationFrame = (cb: any) => setTimeout(() => cb(Date.now()), 16);
-    }
-
-    // 1. Document 补丁 (避免直接赋值 window.document，因为它可能是只读的)
-    try {
-        const doc = _window.document || {};
-        if (typeof doc.getElementById !== 'function') doc.getElementById = () => null;
-        if (typeof doc.createElement !== 'function') doc.createElement = (type: string) => {
-            if (type === 'canvas') return _window.wx.createCanvas();
-            if (type === 'img' || type === 'image') {
-                const img = _window.wx.createImage();
-                (img as any).tagName = 'IMG'; // 关键：PIXI 依赖 tagName 识别资源类型
-                return img;
-            }
-            return { style: {}, appendChild: () => {}, insertBefore: () => {} };
-        };
-        if (!doc.body) doc.body = { style: {}, appendChild: () => {}, insertBefore: () => {} };
-        if (!doc.documentElement) doc.documentElement = { style: {} };
-    } catch (e) {
-        console.warn('Patching document failed', e);
-    }
-
-    // 2. Storage 补丁
-    try {
-        if (typeof _window.localStorage === 'undefined') {
-            _window.localStorage = {
-                getItem: (key: string) => _window.wx.getStorageSync(key),
-                setItem: (key: string, val: string) => _window.wx.setStorageSync(key, val),
-                removeItem: (key: string) => _window.wx.removeStorageSync(key),
-                clear: () => _window.wx.clearStorageSync()
-            };
-        }
-    } catch (e) {
-        console.warn('Patching localStorage failed', e);
-    }
-
-    // 3. 屏幕尺寸补丁
-    try {
-        if (typeof _window.innerWidth === 'undefined') {
-            const info = _window.wx.getSystemInfoSync();
-            _window.innerWidth = info.screenWidth;
-            _window.innerHeight = info.screenHeight;
-        }
-    } catch (e) {
-        console.warn('Patching screen info failed', e);
-    }
-}
-
-/**
- * 游戏入口：深海余烬 (主页升级版)
+ * 游戏入口：深海余烬 (全屏独立页面架构)
  */
 const initGame = async () => {
     // 1. 初始化存档
     SaveManager.load();
 
-    const isWX = typeof (window as any).wx !== 'undefined';
-    const canvas = (window as any).canvas || (typeof document !== 'undefined' ? document.createElement('canvas') : null);
+    const isWX = typeof (window as any).wx !== 'undefined' || typeof (global as any).GameGlobal !== 'undefined' || typeof (global as any).wx !== 'undefined';
+    const _window = (window || (global as any).GameGlobal || {}) as any;
+    
+    const canvas = _window.canvas || (typeof document !== 'undefined' ? document.createElement('canvas') : null);
     
     if (canvas && ! (window as any).canvas && typeof document !== 'undefined' && document.body) {
         document.body.appendChild(canvas);
@@ -83,7 +57,6 @@ const initGame = async () => {
     }
     
     if (canvas.style) canvas.style.touchAction = 'none';
-    // 让 canvas 背景透明，这样视频背景才能透过 canvas 显示
     if (canvas.style) canvas.style.background = 'transparent';
     
     const app = new PIXI.Application({
@@ -92,7 +65,8 @@ const initGame = async () => {
         height: window.innerHeight,
         resolution: window.devicePixelRatio || 1,
         autoDensity: true,
-        backgroundAlpha: 0, // 关键：canvas 本身透明，背景由 body 或 video 提供
+        backgroundAlpha: isWX ? 1 : 0, // 微信端使用实心背景，浏览器端透明以支持视频
+        backgroundColor: 0x00050a,     // 深海底色
         antialias: false,
     });
 
@@ -200,7 +174,7 @@ const initGame = async () => {
             (window as any)._wxVideo = null;
         }
 
-        if (config.id === 'lunatic' && !isWX) {
+        if (config.id === 'lunatic' && !isWX) { // 严格限制：微信环境下决不启用 HTML5 Video
             // 视频背景逻辑 (仅在浏览器环境启用)
             if (typeof document !== 'undefined' && document.body) {
                 app.renderer.background.alpha = 0;
@@ -217,7 +191,7 @@ const initGame = async () => {
                 document.body.insertBefore(video, document.body.firstChild);
             }
         } else {
-            // 普通场景处理
+            // 普通场景处理，微信即便进入疯狂模式也使用图片背景 (避免 API 冲突)
             app.renderer.background.alpha = 1;
             SceneManager.setBackground(config.tex || 'bg_ocean');
         }

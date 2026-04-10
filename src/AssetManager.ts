@@ -85,11 +85,17 @@ export class AssetManager {
         const acidG = new PIXI.Graphics();
         acidG.beginFill(0x00ff00).drawPolygon([0, 0, 10, -5, 20, 0, 10, 5]).endFill();
         acidG.beginFill(0x00ff00, 0.5).drawCircle(10, 0, 12).endFill();
-        this.textures['bullet_acid'] = renderer.generateTexture(acidG);
+        const acidTex = renderer.generateTexture(acidG);
+        this.textures['bullet_acid'] = acidTex;
+        
+        // --- 核心：将所有生成的纹理加入 PIXI 全局缓存，防止 Texture.from 报错 ---
+        Object.entries(this.textures).forEach(([name, tex]) => {
+            if (!PIXI.Cache.has(name)) PIXI.Texture.addToCache(tex, name);
+        });
     }
 
     private static async loadExternalAssets(onProgress?: (p: number) => void): Promise<void> {
-        const isWX = !!(window as any).wx;
+        const isWX = !!(window as any).wx || typeof (global as any).GameGlobal !== 'undefined' || typeof (global as any).wx !== 'undefined';
         // 腾讯云 COS 对象存储基地址
         const REMOTE_BASE = "https://yu-1330371299.cos.ap-guangzhou.myqcloud.com/";
         
@@ -134,6 +140,12 @@ export class AssetManager {
                     // 微信环境下，最稳妥的是手动 wx.createImage
                     tex = await new Promise<PIXI.Texture>((resolve, reject) => {
                         const img = (window as any).wx.createImage();
+                        // 超时保护：15秒加载失败则跳过
+                        const timeoutId = (window as any).setTimeout(() => {
+                             img.onload = null; img.onerror = null;
+                             reject(new Error('Texture Load Timeout: ' + key));
+                        }, 15000);
+
                         // 兼容性修复：部分环境 tagName 只读，使用 defineProperty 强制注入
                         try {
                             Object.defineProperty(img, 'tagName', {
@@ -146,8 +158,20 @@ export class AssetManager {
                         }
                         
                         img.onload = () => {
-                            const base = PIXI.BaseTexture.from(img);
-                            resolve(new PIXI.Texture(base));
+                            (window as any).clearTimeout(timeoutId);
+                            // 使用刚在 main.ts 注册的全球探测器辅助，但也保持显式包装以防万一
+                            const resource = new PIXI.ImageResource(img);
+                            const base = new PIXI.BaseTexture(resource, {
+                                alphaMode: PIXI.ALPHA_MODES.NO_PREMULTIPLIED_ALPHA,
+                                resolution: 1
+                            });
+                            const tex = new PIXI.Texture(base);
+                            
+                            // 双重注入缓存，显式设置名，解决 Texture.from 找不到的问题
+                            if (!PIXI.Cache.has(key)) {
+                                PIXI.Texture.addToCache(tex, key);
+                            }
+                            resolve(tex);
                         };
                         img.onerror = reject;
                         img.src = finalPath;
@@ -164,6 +188,7 @@ export class AssetManager {
                 }
 
                 this.textures[key] = tex;
+                PIXI.Texture.addToCache(tex, key);
                 loaded++;
                 if (onProgress) onProgress(loaded / total);
             } catch (err) {

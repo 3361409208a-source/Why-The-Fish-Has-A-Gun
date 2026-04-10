@@ -162,71 +162,117 @@ export class UIManager {
         this.mainPageContainer.removeChildren();
         this.navContainer.removeChildren();
         
-        // 1. 绘制顶部状态栏（各页面共用）
+        // 1. 绘制顶部状态栏
         this.drawHeader();
 
         // 2. 绘制具体页面内容
         switch(pageId) {
-            case 'lobby': this.drawLobbyPage(); break;
-            case 'weaponry': this.drawWeaponryPage(); break;
-            case 'research': this.drawResearchPage(); break;
-            case 'mall': this.drawMallPage(); break;
+            case 'lobby': 
+                this.drawLobbyPage(); 
+                this.drawSideHUD(); // 大厅显示侧边入口
+                break;
+            case 'weaponry': 
+                this.drawWeaponryPage(); 
+                this.drawBackButton(); // 子页面显示返回按钮
+                break;
+            case 'research': 
+                this.drawResearchPage(); 
+                this.drawBackButton();
+                break;
+            case 'mall': 
+                this.drawMallPage(); 
+                this.drawBackButton();
+                break;
         }
-
-        // 3. 绘制底部导航
-        this.drawNavigationBar();
     }
 
     private static drawHeader(): void {
+        const W = SceneManager.width;
+        // 顶部 HUD 装饰：深海深度与坐标模拟
+        const decorator = new PIXI.Text(`DEPTH: 4,096m | COORD: [72.1, 19.4] | STATUS: COMMAND CENTERER ONLINE`, {
+            fontSize: 14, fill: 0x00f0ff, alpha: 0.5, letterSpacing: 2
+        });
+        decorator.x = 40; decorator.y = 15;
+        this.mainPageContainer.addChild(decorator);
+
         const goldValue = this.formatNumber(SaveManager.state.gold);
-        const goldText = new PIXI.Text(`金币: ${goldValue}`, { 
+        const goldText = new PIXI.Text(`CREDITS: ${goldValue}`, { 
             fontSize: 32, fill: 0xffcc00, fontWeight: 'bold', stroke: '#000', strokeThickness: 4 
         });
         goldText.x = 40; goldText.y = 40;
         this.mainPageContainer.addChild(goldText);
 
-        const title = new PIXI.Text("这鱼不对劲", { fontSize: 56, fill: 0x00f0ff, fontWeight: 'bold' });
-        title.anchor.set(0.5); title.x = SceneManager.width / 2; title.y = 70;
+        const title = new PIXI.Text("DEEP SEA EMBERS", { fontSize: 48, fill: 0x00f0ff, fontWeight: 'bold', letterSpacing: 4 });
+        title.anchor.set(0.5); title.x = W / 2; title.y = 60;
         this.mainPageContainer.addChild(title);
+        
+        // 分割线
+        const line = new PIXI.Graphics().lineStyle(2, 0x00f0ff, 0.3).moveTo(40, 95).lineTo(W - 40, 95);
+        this.mainPageContainer.addChild(line);
     }
 
-    private static drawNavigationBar(): void {
+    private static drawSideHUD(): void {
         const tabs = [
-            { id: 'lobby', name: '海域挑战' },
-            { id: 'weaponry', name: '武器装备' },
-            { id: 'research', name: '升级中心' },
-            { id: 'mall', name: '英雄商城' }
+            { id: 'weaponry', name: 'ARSENAL', icon: 'cannon_v3', desc: '武器库档案馆' },
+            { id: 'research', name: 'CORE TECH', icon: 'skin_lightning', desc: '升级研究中心' },
+            { id: 'mall', name: 'HERO MALL', icon: 'skin_railgun', desc: '英雄武器商店' }
         ];
         
-        const navBg = new PIXI.Graphics().beginFill(0x050e1a, 0.9).drawRect(0, SceneManager.height - 100, SceneManager.width, 100).endFill();
-        this.navContainer.addChild(navBg);
+        const W = SceneManager.width;
+        this.navContainer.x = W - 320;
+        this.navContainer.y = 180;
 
-        const tabWidth = SceneManager.width / tabs.length;
         tabs.forEach((tab, i) => {
-            const isActive = this.activeTab === tab.id;
             const tabBtn = new PIXI.Container();
-            tabBtn.x = i * tabWidth; tabBtn.y = SceneManager.height - 100;
+            tabBtn.y = i * 130;
             
-            const bg = new PIXI.Graphics()
-                .beginFill(isActive ? 0x00f0ff : 0x111822, isActive ? 0.2 : 0)
-                .drawRect(0, 0, tabWidth, 100)
-                .endFill();
+            const bg = new PIXI.Graphics();
+            const bw = 280; const bh = 100; const slant = 30;
             
-            if (isActive) {
-                const marker = new PIXI.Graphics().beginFill(0x00f0ff).drawRect(20, 0, tabWidth - 40, 4).endFill();
-                tabBtn.addChild(marker);
+            bg.beginFill(0x050e1a, 0.7);
+            bg.lineStyle(2, 0x3a4a5e, 1);
+            bg.drawPolygon([slant, 0, bw, 0, bw - slant, bh, 0, bh]);
+            bg.endFill();
+            
+            const iconTex = AssetManager.textures[tab.icon];
+            if (iconTex) {
+                const icon = new PIXI.Sprite(iconTex);
+                icon.width = 60; icon.height = 60; icon.x = slant + 10; icon.y = 20;
+                tabBtn.addChild(icon);
             }
 
-            const txt = new PIXI.Text(tab.name, { 
-                fontSize: 24, fill: isActive ? 0x00f0ff : 0x888888, fontWeight: 'bold' 
-            });
-            txt.anchor.set(0.5); txt.x = tabWidth / 2; txt.y = 50;
+            const txt = new PIXI.Text(tab.name, { fontSize: 22, fill: 0x00f0ff, fontWeight: 'bold' });
+            txt.x = slant + 80; txt.y = 25;
+            const desc = new PIXI.Text(tab.desc, { fontSize: 14, fill: 0x888888 });
+            desc.x = slant + 80; desc.y = 55;
             
-            tabBtn.addChild(bg, txt);
+            tabBtn.addChild(bg, txt, desc);
             tabBtn.eventMode = 'static'; tabBtn.cursor = 'pointer';
+            
+            tabBtn.on('pointerover', () => { bg.tint = 0x00f0ff; tabBtn.scale.set(1.05); });
+            tabBtn.on('pointerout', () => { bg.tint = 0xffffff; tabBtn.scale.set(1); });
             tabBtn.on('pointerdown', () => this.switchPage(tab.id));
             this.navContainer.addChild(tabBtn);
         });
+    }
+
+    private static drawBackButton(): void {
+        const btn = new PIXI.Container();
+        btn.x = 40; btn.y = 120;
+        
+        const bg = new PIXI.Graphics();
+        bg.beginFill(0x8b0000, 0.4).lineStyle(2, 0xff4444, 0.8).drawPolygon([0, 0, 180, 0, 160, 50, -20, 50]).endFill();
+        
+        const txt = new PIXI.Text("« BACK TO HUB", { fontSize: 18, fill: 0xff4444, fontWeight: 'bold' });
+        txt.anchor.set(0.5); txt.x = 80; txt.y = 25;
+        
+        btn.addChild(bg, txt);
+        btn.eventMode = 'static'; btn.cursor = 'pointer';
+        btn.on('pointerover', () => { bg.alpha = 0.8; btn.scale.set(1.05); });
+        btn.on('pointerout', () => { bg.alpha = 0.4; btn.scale.set(1); });
+        btn.on('pointerdown', () => this.switchPage('lobby'));
+        
+        this.navContainer.addChild(btn);
     }
 
     private static drawLobbyPage(): void {
