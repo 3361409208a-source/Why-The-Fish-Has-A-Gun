@@ -95,7 +95,7 @@ export class AssetManager {
     }
 
     private static async loadExternalAssets(onProgress?: (p: number) => void): Promise<void> {
-        const isWX = !!(window as any).wx || typeof (global as any).GameGlobal !== 'undefined' || typeof (global as any).wx !== 'undefined';
+        const isWX = !!(window as any).wx || typeof (window as any).GameGlobal !== 'undefined' || (typeof global !== 'undefined' && (global as any).wx !== 'undefined');
         // 腾讯云 COS 对象存储基地址
         const REMOTE_BASE = "https://yu-1330371299.cos.ap-guangzhou.myqcloud.com/";
         

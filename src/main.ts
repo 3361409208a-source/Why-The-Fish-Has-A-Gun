@@ -45,8 +45,10 @@ const initGame = async () => {
     // 1. 初始化存档
     SaveManager.load();
 
-    const isWX = typeof (window as any).wx !== 'undefined' || typeof (global as any).GameGlobal !== 'undefined' || typeof (global as any).wx !== 'undefined';
-    const _window = (window || (global as any).GameGlobal || {}) as any;
+    const isWX = typeof (window as any).wx !== 'undefined' || 
+                 (typeof (window as any).GameGlobal !== 'undefined') || 
+                 (typeof global !== 'undefined' && (global as any).wx !== 'undefined');
+    const _window = (typeof window !== 'undefined' ? window : (typeof (window as any).GameGlobal !== 'undefined' ? (window as any).GameGlobal : (typeof global !== 'undefined' ? global : {}))) as any;
     
     const canvas = _window.canvas || (typeof document !== 'undefined' ? document.createElement('canvas') : null);
     
@@ -214,4 +216,9 @@ const initGame = async () => {
     console.log('Game Started with Global Upgrades');
 };
 
-initGame();
+// 延迟启动，避免阻塞微信主线程初始化
+(window as any).setTimeout(() => {
+    initGame().catch(err => {
+        console.error('Game Init Error:', err);
+    });
+}, 50);

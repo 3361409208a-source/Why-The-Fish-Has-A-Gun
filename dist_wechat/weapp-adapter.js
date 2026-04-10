@@ -16,7 +16,9 @@ timers.forEach(name => {
 });
 
 // 2. 环境常量与 Window 初始化
-const { screenWidth, screenHeight, devicePixelRatio } = _wx.getSystemInfoSync();
+// 优先使用 game.js 异步预取的系统信息，避免同步调用阻塞 Bridge
+const sysInfo = _GameGlobal.__wxSystemInfo || _wx.getSystemInfoSync();
+const { screenWidth, screenHeight, devicePixelRatio } = sysInfo;
 
 if (typeof window === 'undefined') { _GameGlobal.window = _GameGlobal; }
 const _window = _GameGlobal.window;
