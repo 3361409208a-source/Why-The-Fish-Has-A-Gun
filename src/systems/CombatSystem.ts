@@ -85,9 +85,14 @@ export class CombatSystem {
                 break;
             case 'heavy':
                 AssetManager.playSound('explosion');
-                this.effects.spawnParticles(x, y, 18, 0xffaa00, 6);
-                this.effects.spawnShockwave(x, y, 1.0 + lvl * 0.2);
-                SceneManager.shake(10, 150);
+                // 核能爆燃：超大粒子簇
+                this.effects.spawnParticles(x, y, 40, 0xffdf00, 10); // 亮黄核心
+                this.effects.spawnParticles(x, y, 25, 0xff5500, 8);  // 橙红火光
+                this.effects.spawnParticles(x, y, 20, 0x00ff00, 12); // 核能绿光
+                // 多重冲击波叠加
+                this.effects.spawnShockwave(x, y, 2.5 + lvl * 0.5);
+                // setTimeout(() => this.effects.spawnShockwave(x, y, 1.2 + lvl * 0.3), 100);
+                // 剧烈震屏已根据用户要求移除
                 break;
             case 'lightning':
                 this.effects.spawnParticles(x, y, 8, 0x00ffff, 5);

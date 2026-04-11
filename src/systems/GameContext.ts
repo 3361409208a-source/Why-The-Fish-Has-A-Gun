@@ -32,6 +32,14 @@ export interface CorrodeEffect {
     fxFrames: number;
 }
 
+export interface RadiationEffect {
+    fish: Fish;
+    remainingFrames: number;
+    tickFrames: number;
+    dmgPerTick: number;
+    fxFrames: number;
+}
+
 export interface GameContext {
     app: PIXI.Application;
     pool: PoolManager;
@@ -46,6 +54,7 @@ export interface GameContext {
     // 状态效果
     electrified: ElectrocuteEffect[];
     corroded: CorrodeEffect[];
+    radiated: RadiationEffect[];
     // 经济
     crystals: number;
     // 武器状态

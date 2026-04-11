@@ -14,7 +14,7 @@ export class AttackSystem {
         private ctx: GameContext,
         private applyDamage: DamageApplier,
         private status: StatusSystem,
-    ) {}
+    ) { }
 
     onDirectHit(params: {
         weaponId: string;
@@ -26,15 +26,26 @@ export class AttackSystem {
     }): void {
         const { weaponId, level, bulletX, bulletY, baseDamage, dmgMult } = params;
 
-        // heavy：爆炸AOE
+        // heavy：原子爆破 AOE
         if (weaponId === 'heavy') {
-            const rangeSq = Math.pow(AOE.baseRange + level * AOE.rangePerLevel, 2);
+            const range = AOE.baseRange + level * AOE.rangePerLevel;
+            const rangeSq = range * range;
+            const coreRangeSq = Math.pow(range * 0.35, 2); // 核心探测区：爆炸半径的前35%
+
             for (const t of this.ctx.fishes) {
                 if (!t.isActive) continue;
                 const dx = t.x - bulletX;
                 const dy = t.y - bulletY;
-                if (dx * dx + dy * dy < rangeSq) {
-                    this.applyDamage(t, baseDamage * AOE.damageFalloff * dmgMult);
+                const distSq = dx * dx + dy * dy;
+
+                if (distSq < rangeSq) {
+                    // 核心区域伤害倍率：200%，边缘：70% (AOE.damageFalloff)
+                    const isCore = distSq < coreRangeSq;
+                    const finalMult = isCore ? 2.0 : AOE.damageFalloff;
+
+                    this.applyDamage(t, baseDamage * finalMult * dmgMult);
+                    // 只要在爆炸范围内的鱼，都会被核辐射致残
+                    this.status.applyRadiation(t, baseDamage * dmgMult);
                 }
             }
         }

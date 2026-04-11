@@ -17,10 +17,10 @@ export class Particle extends PIXI.Sprite {
         this.x = x;
         this.y = y;
         this.tint = color;
-        
+
         // 纹理原始大小是 8x8 (radius 4)
         this.scale.set(size / 8);
-        
+
         const angle = Math.random() * Math.PI * 2;
         const force = Math.random() * 5 + 2;
         this.vx = Math.cos(angle) * force;
@@ -37,7 +37,7 @@ export class Particle extends PIXI.Sprite {
         this.x += this.vx * delta;
         this.y += this.vy * delta;
         this.vy += 0.1 * delta; // 重力
-        
+
         this.life -= 0.03 * delta;
         this.alpha = this.life;
 

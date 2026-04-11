@@ -1,5 +1,5 @@
 import type { Fish } from '../entities/Fish';
-import type { GameContext, ElectrocuteEffect, CorrodeEffect } from './GameContext';
+import type { GameContext, ElectrocuteEffect, CorrodeEffect, RadiationEffect } from './GameContext';
 import type { EffectSystem } from './EffectSystem';
 import { AssetManager } from '../AssetManager';
 
@@ -15,6 +15,7 @@ export class StatusSystem {
     update(delta: number): void {
         this.updateElectrocute(delta);
         this.updateCorrode(delta);
+        this.updateRadiation(delta);
     }
 
     applyElectrocute(fish: Fish, baseHitDmg: number, sourceFish?: Fish): void {
@@ -69,6 +70,31 @@ export class StatusSystem {
             fxFrames: 0,
         };
         this.ctx.corroded.push(e);
+    }
+
+    applyRadiation(fish: Fish, baseHitDmg: number): void {
+        // 6秒核辐射：总DOT=基础伤害的200%，每0.4s跳一次（15跳）
+        // 核辐射是极其致命的持续伤害
+        const totalFrames = 360;
+        const ticks = 15;
+        const totalDot = baseHitDmg * 2.0;
+        const dmgPerTick = totalDot / ticks;
+
+        const existing = this.ctx.radiated.find(e => e.fish === fish);
+        if (existing) {
+            existing.remainingFrames = Math.max(existing.remainingFrames, totalFrames);
+            existing.dmgPerTick = Math.max(existing.dmgPerTick, dmgPerTick);
+            return;
+        }
+
+        const e: RadiationEffect = {
+            fish,
+            remainingFrames: totalFrames,
+            tickFrames: 24,
+            dmgPerTick,
+            fxFrames: 0,
+        };
+        this.ctx.radiated.push(e);
     }
 
     private updateElectrocute(delta: number): void {
@@ -135,6 +161,32 @@ export class StatusSystem {
             }
 
             if (e.remainingFrames <= 0) this.ctx.corroded.splice(i, 1);
+        }
+    }
+
+    private updateRadiation(delta: number): void {
+        if (this.ctx.radiated.length === 0) return;
+        for (let i = this.ctx.radiated.length - 1; i >= 0; i--) {
+            const e = this.ctx.radiated[i];
+            if (!e.fish.isActive) { this.ctx.radiated.splice(i, 1); continue; }
+
+            e.remainingFrames -= delta;
+            e.tickFrames -= delta;
+            e.fxFrames -= delta;
+
+            // 持续核辐射视觉：亮黄色与绿色交替，粒子更大更亮
+            for (let k = 0; e.fxFrames <= 0 && k < 4; k++) {
+                e.fxFrames += 5; // ~12次/秒
+                const color = Math.random() > 0.5 ? 0xffdf00 : 0xccff00;
+                this.effects.spawnParticles(e.fish.x, e.fish.y, 3, color, 6);
+            }
+
+            for (let k = 0; e.tickFrames <= 0 && k < 3; k++) {
+                e.tickFrames += 24; // ~0.4s
+                this.applyDamage(e.fish, e.dmgPerTick);
+            }
+
+            if (e.remainingFrames <= 0) this.ctx.radiated.splice(i, 1);
         }
     }
 }

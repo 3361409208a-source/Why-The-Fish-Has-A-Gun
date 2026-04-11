@@ -54,6 +54,12 @@ export class Bullet extends PIXI.Sprite {
             if (this.arcGfx) this.arcGfx.visible = false;
             let targetSize = BULLET_LEVEL.baseSize * (1 + (level - 1) * BULLET_LEVEL.sizePerLevel);
             if (type === 'void') targetSize *= 2.5;
+            if (type === 'heavy') {
+                targetSize *= 2.2; // 核能弹头体积巨大
+                this.tint = 0xffdf00;
+            } else {
+                this.tint = 0xffffff;
+            }
             this.scale.set(targetSize / (this.texture.width || 1024) * 1.5);
             this.blendMode = PIXI.BLEND_MODES.ADD;
         }

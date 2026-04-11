@@ -80,7 +80,7 @@ export class ComboDisplay {
         };
         numTick();
 
-        if (count % 10 === 0) SceneManager.shake(3, 100);
+        // if (count % 10 === 0) SceneManager.shake(3, 100);
     }
 
     public static hide(): void {

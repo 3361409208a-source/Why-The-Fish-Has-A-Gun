@@ -49,6 +49,7 @@ export class GameController {
             particles: [], shockwaves: [], lightnings: [],
             electrified: [],
             corroded: [],
+            radiated: [],
             crystals: 2000,
             weaponLevels: {},
             unlockedWeapons: ['cannon_base', 'fish_tuna_mode', 'gatling', 'heavy', 'lightning'],
@@ -213,6 +214,7 @@ export class GameController {
         });
         this.ctx.fishes = []; this.ctx.bullets = []; this.ctx.cores = [];
         this.ctx.particles = []; this.ctx.shockwaves = []; this.ctx.lightnings = [];
+        this.ctx.electrified = []; this.ctx.corroded = []; this.ctx.radiated = [];
 
         if (this.ctx.cannon?.parent) this.ctx.cannon.parent.removeChild(this.ctx.cannon);
 

@@ -47,11 +47,10 @@ export const BULLET_LEVEL = {
     baseSize: 60,           // 基础尺寸
 };
 
-/** AOE爆炸参数（heavy武器） */
 export const AOE = {
-    baseRange: 150,
-    rangePerLevel: 20,
-    damageFalloff: 0.5, // AOE范围内的伤害比例
+    baseRange: 280,      // 大幅增加基础爆炸范围 (150 -> 280)
+    rangePerLevel: 40,   // 每级成长增加 (20 -> 40)
+    damageFalloff: 0.7,  // 边缘伤害比例提升 (0.5 -> 0.7)
 };
 
 /** 连锁闪电参数（lightning武器） */

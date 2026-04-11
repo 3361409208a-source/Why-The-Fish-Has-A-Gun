@@ -68,14 +68,14 @@ export const WEAPONS: WeaponDef[] = [
     {
         id: 'heavy',
         name: '重爆核能炮',
-        desc: '毁灭性的范围爆破，核心区域伤害翻倍。',
+        desc: '禁忌的核能武器。毁灭性的范围爆破，核心区域造成2倍伤害并附加核辐射！',
         skinKey: 'skin_heavy',
         bulletKey: 'bullet_v2',
         unlockCost: 8000,
         goldCost: 0,
-        fireInterval: 18,
-        baseSpeed: 8,
-        baseDamage: 12,
+        fireInterval: 25, // 稍微降低射速，增加厚重感
+        baseSpeed: 7,    // 稍微降低飞行速度
+        baseDamage: 28,  // 大幅增加基础伤害 (12 -> 28)
         maxLevel: 5,
         isHero: false,
         isAOE: true,
