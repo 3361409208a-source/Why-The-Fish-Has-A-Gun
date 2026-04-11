@@ -57,7 +57,7 @@ export const AOE = {
 /** 连锁闪电参数（lightning武器） */
 export const CHAIN = {
     baseTargets: 5,        // 基础跳跃次数（+level）
-    chainRange: 300,       // 跳跃最远距离
+    chainRange: 180,       // 跳跃最远距离 (原来300，避免连太远)
     damageFalloff: 0.85,   // 每次跳跃伤害乘数
 };
 
