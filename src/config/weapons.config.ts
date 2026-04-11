@@ -88,10 +88,10 @@ export const WEAPONS: WeaponDef[] = [
         bulletKey: 'bullet_v2',
         unlockCost: 15000,
         goldCost: 0,
-        // 频率降低：避免环绕电弧与音效过于密集
+        // 频率极大降低：避免环绕电弧瞎眼与卡顿，但单发威力获得了史诗级加强
         fireInterval: 48,
         baseSpeed: 25,
-        baseDamage: 0.8,
+        baseDamage: 8.0, // 从 0.8 增强至 8.0，补偿极慢的攻击频次
         maxLevel: 5,
         isHero: false,
         isChain: true,

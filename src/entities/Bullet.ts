@@ -57,12 +57,15 @@ export class Bullet extends PIXI.Sprite {
             if (this.arcGfx) this.arcGfx.visible = false;
             let targetSize = BULLET_LEVEL.baseSize * (1 + (level - 1) * BULLET_LEVEL.sizePerLevel);
             if (type === 'void') targetSize *= 2.5;
-            this.scale.set(targetSize / (this.texture.width || 1024) * 1.5); 
-            this.blendMode = PIXI.BLEND_MODES.ADD; 
+            this.scale.set(targetSize / (this.texture.width || 1024) * 1.5);
+            this.blendMode = PIXI.BLEND_MODES.ADD;
         }
 
         const bonus = level - 1;
-        this.damage = (baseDmg * BULLET_LEVEL.damageBase + bonus * BULLET_LEVEL.damagePerLevel) * dmgMult;
+        // 修复严重Bug：原来的写法导致等级增加的固定伤害(10)不吃武器的 baseDmg 乘区
+        // 从而导致所有低射速、高单发伤害的武器（如重型火炮、闪电、轨道炮）升级时收益极低（跟没升级一样）
+        const rawBulletDmg = BULLET_LEVEL.damageBase + bonus * BULLET_LEVEL.damagePerLevel;
+        this.damage = baseDmg * rawBulletDmg * dmgMult;
         this.speed = baseSpeed * speedMult * (1 + bonus * BULLET_LEVEL.speedPerLevel);
     }
 
@@ -134,7 +137,7 @@ export class Bullet extends PIXI.Sprite {
 
         const margin = 400;
         const outOfBounds = (this.x < -margin || this.x > SceneManager.width + margin ||
-                             this.y < -margin || this.y > SceneManager.height + margin);
+            this.y < -margin || this.y > SceneManager.height + margin);
         if (outOfBounds) {
             this.kill();
         }
@@ -169,7 +172,7 @@ export class Bullet extends PIXI.Sprite {
         const dist = Math.sqrt(ex * ex + ey * ey);
         if (dist < 2) return;
         const pnX = -ey / dist;
-        const pnY =  ex / dist;
+        const pnY = ex / dist;
 
         const segments = 5;
         const pts: [number, number][] = [[0, 0]];
@@ -209,7 +212,7 @@ export class Bullet extends PIXI.Sprite {
 
         // 垂直方向单位向量（锯齿偏移用）
         const pnX = -sy / dist;
-        const pnY =  sx / dist;
+        const pnY = sx / dist;
 
         // 电弧持续期间保持全亮，最后快速淡出
         const fade = this.trailTimer > 200 ? Math.max(0, 1 - (this.trailTimer - 200) / 40) : 1;
@@ -262,7 +265,7 @@ export class Bullet extends PIXI.Sprite {
 
         // 垂直方向（锯齿偏移）
         const pnX = -sinA;
-        const pnY =  cosA;
+        const pnY = cosA;
 
         // 透明度随时间淡出（trailTimer 60帧内全亮，之后快速衰减）
         const fade = Math.max(0, 1 - this.trailTimer / 80);
