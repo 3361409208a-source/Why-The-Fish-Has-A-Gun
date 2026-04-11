@@ -98,28 +98,25 @@ export class CombatSystem {
     }
 
     private triggerChainLightning(startFish: Fish, maxCount: number, baseDmg: number): void {
-        let current = startFish;
-        let count = 0;
-        const hitSet = new Set<Fish>([startFish]);
-        let currentDmg = baseDmg * CHAIN.damageFalloff;
+        const branchDmg = baseDmg * CHAIN.damageFalloff;
 
-        while (count < maxCount) {
-            let next: Fish | null = null;
-            let minDist = CHAIN.chainRange;
-            for (const f of this.ctx.fishes) {
-                if (!f.isActive || hitSet.has(f)) continue;
-                const d = Math.sqrt(Math.pow(f.x - current.x, 2) + Math.pow(f.y - current.y, 2));
-                if (d < minDist) { minDist = d; next = f; }
+        let candidates: { fish: Fish; dist: number }[] = [];
+        for (const f of this.ctx.fishes) {
+            if (!f.isActive || f === startFish) continue;
+            const distSq = Math.pow(f.x - startFish.x, 2) + Math.pow(f.y - startFish.y, 2);
+            if (distSq <= CHAIN.chainRange * CHAIN.chainRange) {
+                candidates.push({ fish: f, dist: distSq });
             }
-            if (next) {
-                this.effects.spawnLightning(current.x, current.y, next.x, next.y, true);
-                this.applyDamage(next, currentDmg);
-                this.status.applyElectrocute(next, currentDmg);
-                hitSet.add(next);
-                current = next;
-                count++;
-                currentDmg *= CHAIN.damageFalloff;
-            } else break;
+        }
+
+        // 排序找到最近的 maxCount 个单位直接分支电击
+        candidates.sort((a, b) => a.dist - b.dist);
+        const targets = candidates.slice(0, maxCount);
+
+        for (const t of targets) {
+            this.effects.spawnLightning(startFish.x, startFish.y, t.fish.x, t.fish.y, true);
+            this.applyDamage(t.fish, branchDmg);
+            this.status.applyElectrocute(t.fish, branchDmg);
         }
     }
 
