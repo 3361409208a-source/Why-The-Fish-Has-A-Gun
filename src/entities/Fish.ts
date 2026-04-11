@@ -151,44 +151,74 @@ export class Fish extends PIXI.Sprite {
         } else {
             this.bossKey = '';
             const speciesRand = Math.random();
-            if (speciesRand < 0.15) {
-                // 原有灯笼鱼 -> 升级为 科技狙击灯笼鱼
-                tex = AssetManager.textures['fish_tech_angler'] || AssetManager.textures['fish_angler'];
-                this.hp = 200; // 稍微更肉一点
-                this.originalSpeed = 1.3;
-                const w = tex ? (tex.width || 1024) : 1024;
-                baseScale = 0.7 * (120 / w);
-            } else if (speciesRand < 0.30) {
-                // 原有水母
-                this.fishType = 'jelly'; tex = AssetManager.textures['fish_jelly'];
-                this.hp = 50; this.originalSpeed = 0.4;
-                const w = tex ? (tex.width || 1024) : 1024;
-                baseScale = 1.0 * (100 / w);
-            } else if (speciesRand < 0.45) {
-                // 新增：科技食人鱼
-                tex = AssetManager.textures['fish_bio_piranha'];
-                this.hp = 120; this.originalSpeed = 2.0; // 速度快
-                const w = tex ? (tex.width || 1024) : 1024;
-                baseScale = 0.6 * (100 / w);
-            } else if (speciesRand < 0.65) {
-                // 新增：科技武装鲨鱼 (精英)
-                tex = AssetManager.textures['fish_cyber_shark'];
-                this.hp = 500; this.originalSpeed = 0.7;
-                const w = tex ? (tex.width || 1024) : 1024;
-                baseScale = 1.2 * (180 / w);
-            } else if (speciesRand < 0.80) {
-                // 新增：电磁炮剑鱼 (精英)
-                tex = AssetManager.textures['fish_railgun_swordfish'];
-                this.hp = 400; this.originalSpeed = 2.5; // 极速
-                const w = tex ? (tex.width || 1024) : 1024;
-                baseScale = 0.9 * (200 / w);
-            } else {
+            if (speciesRand < 0.09) {
                 // 原有金枪鱼
                 tex = AssetManager.textures['fish_tuna']; this.hp = 100;
                 this.originalSpeed = 0.8;
                 const w = tex ? (tex.width || 1024) : 1024;
                 baseScale = 1.4 * (100 / w);
-                this.hitRadius = (w * 0.6) * baseScale / 2; // 针对小鱼也进行 60% 肉身压缩
+                this.hitRadius = (w * 0.6) * baseScale / 2;
+            } else if (speciesRand < 0.18) {
+                // 科技狙击灯笼鱼
+                tex = AssetManager.textures['fish_tech_angler'] || AssetManager.textures['fish_angler'];
+                this.hp = 200;
+                this.originalSpeed = 1.3;
+                const w = tex ? (tex.width || 1024) : 1024;
+                baseScale = 0.7 * (120 / w);
+            } else if (speciesRand < 0.27) {
+                // 水母
+                this.fishType = 'jelly'; tex = AssetManager.textures['fish_jelly'];
+                this.hp = 50; this.originalSpeed = 0.4;
+                const w = tex ? (tex.width || 1024) : 1024;
+                baseScale = 1.0 * (100 / w);
+            } else if (speciesRand < 0.36) {
+                // 科技食人鱼
+                tex = AssetManager.textures['fish_bio_piranha'];
+                this.hp = 120; this.originalSpeed = 2.0;
+                const w = tex ? (tex.width || 1024) : 1024;
+                baseScale = 0.6 * (100 / w);
+            } else if (speciesRand < 0.45) {
+                // 科技武装鲨鱼 (精英)
+                tex = AssetManager.textures['fish_cyber_shark'];
+                this.hp = 500; this.originalSpeed = 0.7;
+                const w = tex ? (tex.width || 1024) : 1024;
+                baseScale = 1.2 * (180 / w);
+            } else if (speciesRand < 0.54) {
+                // 电磁炮剑鱼 (精英)
+                tex = AssetManager.textures['fish_railgun_swordfish'];
+                this.hp = 400; this.originalSpeed = 2.5;
+                const w = tex ? (tex.width || 1024) : 1024;
+                baseScale = 0.9 * (200 / w);
+            } else if (speciesRand < 0.63) {
+                // 生化毒河豚 (新)
+                tex = AssetManager.textures['fish_bio_pufferfish'];
+                this.hp = 280; this.originalSpeed = 0.5;
+                const w = tex ? (tex.width || 1024) : 1024;
+                baseScale = 1.0 * (120 / w);
+            } else if (speciesRand < 0.72) {
+                // 装甲梭鱼 (新)
+                tex = AssetManager.textures['fish_armored_barracuda'];
+                this.hp = 180; this.originalSpeed = 3.2; // 极快
+                const w = tex ? (tex.width || 1024) : 1024;
+                baseScale = 0.6 * (110 / w);
+            } else if (speciesRand < 0.81) {
+                // 赛博三文鱼 (新)
+                tex = AssetManager.textures['fish_cyber_salmon'];
+                this.hp = 250; this.originalSpeed = 1.2;
+                const w = tex ? (tex.width || 1024) : 1024;
+                baseScale = 0.8 * (130 / w);
+            } else if (speciesRand < 0.90) {
+                // 霓虹赛博脂鲤 (新)
+                tex = AssetManager.textures['fish_cyber_tetra'];
+                this.hp = 80; this.originalSpeed = 1.8;
+                const w = tex ? (tex.width || 1024) : 1024;
+                baseScale = 0.9 * (90 / w);
+            } else {
+                // 科幻刺鳐 (新，精英级)
+                tex = AssetManager.textures['fish_scifi_stingray'];
+                this.hp = 600; this.originalSpeed = 1.0;
+                const w = tex ? (tex.width || 1024) : 1024;
+                baseScale = 1.2 * (170 / w);
             }
         }
 

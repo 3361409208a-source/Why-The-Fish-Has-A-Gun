@@ -35,7 +35,7 @@ export class AssetManager {
         const coreG = new PIXI.Graphics();
         coreG.beginFill(0x00ff00).drawPolygon([0, -15, 10, 0, 0, 15, -10, 0]).endFill();
         this.textures['item_core'] = renderer.generateTexture(coreG);
-        
+
         const whiteG = new PIXI.Graphics();
         whiteG.beginFill(0xffffff).drawRect(0, 0, 32, 32).endFill();
         this.textures['white'] = renderer.generateTexture(whiteG);
@@ -48,7 +48,7 @@ export class AssetManager {
 
     private static async loadSounds(): Promise<void> {
         const soundMap: { [key: string]: string } = {
-            'shoot':     'https://yu-1330371299.cos.ap-guangzhou.myqcloud.com/Boom.mp3',
+            'shoot': 'https://yu-1330371299.cos.ap-guangzhou.myqcloud.com/Boom.mp3',
             'lightning': 'https://yu-1330371299.cos.ap-guangzhou.myqcloud.com/dianjijizhong.mp3',
         };
         await Promise.all(Object.entries(soundMap).map(async ([key, url]) => {
@@ -66,7 +66,7 @@ export class AssetManager {
         const isWX = !!(window as any).wx || typeof (window as any).GameGlobal !== 'undefined' || (typeof global !== 'undefined' && (global as any).wx !== 'undefined');
         // 腾讯云 COS 对象存储基地址
         const REMOTE_BASE = "https://yu-1330371299.cos.ap-guangzhou.myqcloud.com/";
-        
+
         // 关键：将 assets/xxx.png 映射到 COS 根目录下的 xxx.png (剥离 assets/ 路径)
         const getPath = (p: string) => {
             const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -103,6 +103,11 @@ export class AssetManager {
             'fish_bio_piranha': 'assets/fish_bio_piranha.png',
             'fish_tech_angler': 'assets/fish_tech_angler.png',
             'fish_railgun_swordfish': 'assets/fish_railgun_swordfish.png',
+            'fish_cyber_salmon': 'assets/fish_cyber_salmon.png',
+            'fish_bio_pufferfish': 'assets/fish_bio_pufferfish.png',
+            'fish_armored_barracuda': 'assets/fish_armored_barracuda.png',
+            'fish_cyber_tetra': 'assets/fish_cyber_tetra.png',
+            'fish_scifi_stingray': 'assets/fish_scifi_stingray.png',
             'skin_gatling': 'assets/skin_gatling.png',
             'skin_heavy': 'assets/skin_heavy.png',
             'skin_tuna': 'assets/skin_tuna.png',
@@ -120,15 +125,15 @@ export class AssetManager {
             const finalPath = getPath(path);
             try {
                 let tex: PIXI.Texture;
-                
+
                 if (isWX) {
                     // 微信环境下，最稳妥的是手动 wx.createImage
                     tex = await new Promise<PIXI.Texture>((resolve, reject) => {
                         const img = (window as any).wx.createImage();
                         // 超时保护：15秒加载失败则跳过
                         const timeoutId = (window as any).setTimeout(() => {
-                             img.onload = null; img.onerror = null;
-                             reject(new Error('Texture Load Timeout: ' + key));
+                            img.onload = null; img.onerror = null;
+                            reject(new Error('Texture Load Timeout: ' + key));
                         }, 15000);
 
                         // 兼容性修复：部分环境 tagName 只读，使用 defineProperty 强制注入
@@ -141,7 +146,7 @@ export class AssetManager {
                         } catch (e) {
                             console.warn('AssetManager: Failed to inject tagName to WX image');
                         }
-                        
+
                         img.onload = () => {
                             (window as any).clearTimeout(timeoutId);
                             // 使用刚在 main.ts 注册的全球探测器辅助，但也保持显式包装以防万一
@@ -151,7 +156,7 @@ export class AssetManager {
                                 resolution: 1
                             });
                             const tex = new PIXI.Texture(base);
-                            
+
                             // 双重注入缓存，显式设置名，解决 Texture.from 找不到的问题
                             if (!PIXI.Cache.has(key)) {
                                 PIXI.Texture.addToCache(tex, key);
@@ -195,8 +200,8 @@ export class AssetManager {
         const nowSec = this.audioCtx.currentTime;
         const throttleSec =
             type === 'lightning' ? 0.20 :
-            type === 'shoot'     ? 0.03 :
-            0;
+                type === 'shoot' ? 0.03 :
+                    0;
         if (throttleSec > 0) {
             const nextOk = this.soundNextAllowedAt[type] ?? 0;
             if (nowSec < nextOk) return;
@@ -215,8 +220,8 @@ export class AssetManager {
             // 闪电音效更刺耳，默认压低音量
             gain.gain.value =
                 type === 'lightning' ? 0.18 :
-                type === 'shoot'     ? 0.60 :
-                0.40;
+                    type === 'shoot' ? 0.60 :
+                        0.40;
             src.connect(gain);
             gain.connect(this.audioCtx.destination);
             const playDuration = duration ?? src.buffer.duration;
@@ -235,7 +240,7 @@ export class AssetManager {
         const gain = this.audioCtx.createGain();
         osc.connect(gain); gain.connect(this.audioCtx.destination);
         const now = this.audioCtx.currentTime;
-        switch(type) {
+        switch (type) {
             case 'shoot':
                 osc.type = 'triangle'; osc.frequency.setValueAtTime(440, now);
                 osc.frequency.exponentialRampToValueAtTime(110, now + 0.1);
