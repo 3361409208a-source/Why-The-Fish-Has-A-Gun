@@ -4,23 +4,25 @@
  */
 export const GameEvents = {
     // 系统 → UI
-    UI_HUD_UPDATE:    'ui:hud',
-    UI_COMBO:         'ui:combo',
+    UI_HUD_UPDATE: 'ui:hud',
+    UI_COMBO: 'ui:combo',
     UI_FLOATING_TEXT: 'ui:text',
-    UI_SHOP_REFRESH:  'ui:shop',
+    UI_BERSERK_UPDATE: 'ui:berserk',
+    UI_SHOP_REFRESH: 'ui:shop',
     // UI → 系统（玩家操作）
-    WEAPON_SELECT:    'game:weaponSelect',
-    WEAPON_UPGRADE:   'game:weaponUpgrade',
+    WEAPON_SELECT: 'game:weaponSelect',
+    WEAPON_UPGRADE: 'game:weaponUpgrade',
     // 关卡模式
     STAGE_BOSS_SPAWNED: 'stage:bossSpawned',
-    STAGE_BOSS_KILLED:  'stage:bossKilled',
-    STAGE_CLEAR:        'stage:clear',
+    STAGE_BOSS_KILLED: 'stage:bossKilled',
+    STAGE_CLEAR: 'stage:clear',
 } as const;
 
-export interface HudUpdatePayload    { crystals: number; }
-export interface ComboPayload        { count: number; }
+export interface HudUpdatePayload { crystals: number; }
+export interface ComboPayload { count: number; }
 export interface FloatingTextPayload { x: number; y: number; text: string; color?: number; isCrit?: boolean; }
-export interface ShopRefreshPayload  { weapons: any[]; }
+export interface ShopRefreshPayload { weapons: any[]; }
 export interface WeaponActionPayload { id: string; }
-export interface StageBossPayload  { bossKey: string; bossName: string; spawnDialogue?: import('../config/dialogue.config').DialogueLine[]; }
+export interface StageBossPayload { bossKey: string; bossName: string; spawnDialogue?: import('../config/dialogue.config').DialogueLine[]; }
 export interface StageClearPayload { levelId: number; }
+export interface BerserkUpdatePayload { charge: number; isActive: boolean; }

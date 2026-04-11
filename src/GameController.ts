@@ -71,16 +71,19 @@ export class GameController {
             stageBossSpawnInterval: 0,
             stageBossesTotal: 0,
             stageBossesKilled: 0,
+            berserkTimer: 0,
+            isBerserk: false,
+            berserkCharge: 0,
         };
 
         if (stageLevel > 0) {
             const lvl = LEVELS.find(l => l.id === stageLevel);
             if (lvl) {
-                this.ctx.stageBossQueue    = lvl.bosses.map(b => b.bossKey);
-                this.ctx.stageBossNames    = lvl.bosses.map(b => b.name);
-                this.ctx.stageBossesTotal  = lvl.bosses.length;
+                this.ctx.stageBossQueue = lvl.bosses.map(b => b.bossKey);
+                this.ctx.stageBossNames = lvl.bosses.map(b => b.name);
+                this.ctx.stageBossesTotal = lvl.bosses.length;
                 this.ctx.stageBossSpawnInterval = lvl.bossSpawnInterval;
-                this.ctx.stageBossSpawnTimer    = lvl.bossSpawnInterval;
+                this.ctx.stageBossSpawnTimer = lvl.bossSpawnInterval;
             }
         }
 
@@ -89,19 +92,19 @@ export class GameController {
             this.ctx.weaponLevels[w.id] = savedLevels[w.id] ?? 1;
         }
 
-        this.bridge  = new UIBridge();
+        this.bridge = new UIBridge();
         this.bridge.init();
         this.effects = new EffectSystem(this.ctx);
         this.spawner = new SpawnSystem(this.ctx, this.effects);
+        this.status = new StatusSystem(this.ctx, this.effects, (fish, dmg) => {
+            this.combat.applyDamage(fish, dmg, { allowCrit: false, allowComboOnKill: false, showText: true });
+        });
         this.attacks = new AttackSystem(this.ctx, (fish, dmg) => {
             this.combat.applyDamage(fish, dmg);
         }, this.status);
-        this.status  = new StatusSystem(this.ctx, this.effects, (fish, dmg) => {
-            this.combat.applyDamage(fish, dmg, { allowCrit: false, allowComboOnKill: false, showText: true });
-        });
-        this.combat  = new CombatSystem(this.ctx, this.effects, this.spawner, this.status, this.attacks);
+        this.combat = new CombatSystem(this.ctx, this.effects, this.spawner, this.status, this.attacks);
         this.weapons = new WeaponSystem(this.ctx, this.effects);
-        this.input   = new InputSystem(app, cannon, () => this.ctx.isPaused, this.ctx);
+        this.input = new InputSystem(app, cannon, () => this.ctx.isPaused, this.ctx);
 
         this.initBackButton(app, onBack);
         this.input.init();
@@ -204,7 +207,7 @@ export class GameController {
         if (this.ctx.app.stage.hitArea) this.ctx.app.stage.hitArea = null;
 
         [...this.ctx.fishes, ...this.ctx.bullets, ...this.ctx.cores,
-         ...this.ctx.particles, ...this.ctx.shockwaves, ...this.ctx.lightnings].forEach(e => {
+        ...this.ctx.particles, ...this.ctx.shockwaves, ...this.ctx.lightnings].forEach(e => {
             if (e.parent) e.parent.removeChild(e);
             if (e.kill) e.kill();
         });

@@ -84,6 +84,10 @@ export class UIManager {
         ComboDisplay.update(count);
     }
 
+    public static updateBerserk(charge: number, isActive: boolean): void {
+        BattleHUD.updateBerserk(charge, isActive);
+    }
+
     public static setupShop(weapons: any[], onSelect: (id: string) => void, onUpgrade: (id: string) => void): void {
         WeaponShopPanel.setup(weapons, onSelect, onUpgrade);
     }

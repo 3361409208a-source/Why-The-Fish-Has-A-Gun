@@ -1,6 +1,7 @@
 import { SceneManager, Layers } from '../SceneManager';
 import { AssetManager } from '../AssetManager';
 import { SaveManager } from '../SaveManager';
+import { UIManager } from '../UIManager';
 import { Bullet } from '../entities/Bullet';
 import { WEAPONS, getWeapon } from '../config/weapons.config';
 import { UPGRADE } from '../config/balance.config';
@@ -95,7 +96,35 @@ export class WeaponSystem {
 
 
         this.autoFireTimer += delta;
-        const fireRateMult = (window as any).TalentFireRateMult || 1.0;
+
+        // --- 狂热(Berserk)逻辑实现 ---
+        // 10s 为一个周期 (600帧 @60fps). 
+        // 前 6s (360帧) 为能量收集阶段，后 4s (240帧) 为爆发阶段 (x5 射速)
+        const CYCLE_FRAMES = 600;
+        const BERSERK_DURATION = 240;
+        const COLLECT_DURATION = CYCLE_FRAMES - BERSERK_DURATION;
+
+        this.ctx.berserkTimer += delta;
+        if (this.ctx.berserkTimer >= CYCLE_FRAMES) {
+            this.ctx.berserkTimer = 0;
+        }
+
+        if (this.ctx.berserkTimer < COLLECT_DURATION) {
+            // 能量收集阶段
+            this.ctx.isBerserk = false;
+            this.ctx.berserkCharge = this.ctx.berserkTimer / COLLECT_DURATION;
+        } else {
+            // 爆发阶段
+            this.ctx.isBerserk = true;
+            this.ctx.berserkCharge = 1 - (this.ctx.berserkTimer - COLLECT_DURATION) / BERSERK_DURATION;
+        }
+
+        // 更新 UI
+        UIManager.updateBerserk(this.ctx.berserkCharge, this.ctx.isBerserk);
+
+        let fireRateMult = (window as any).TalentFireRateMult || 1.0;
+        if (this.ctx.isBerserk) fireRateMult *= 5.0; // 狂热加成
+
         if (this.autoFireTimer > def.fireInterval / fireRateMult) {
             const angle = this.ctx.cannon.getFireAngle();
             const shots = def.multiShot ?? 1;

@@ -74,4 +74,8 @@ export interface GameContext {
     stageBossSpawnInterval: number;// Boss 生成间隔（帧）
     stageBossesTotal: number;      // 本关总 Boss 数
     stageBossesKilled: number;     // 已击杀 Boss 数
+    // 全局狂热（Berserk）效果
+    berserkTimer: number;          // 每 10s 一个循环的计时器
+    isBerserk: boolean;            // 是否处于狂热状态
+    berserkCharge: number;         // 能量条百分比 (0-1)
 }
