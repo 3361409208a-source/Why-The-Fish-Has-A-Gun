@@ -12,7 +12,7 @@ PIXI.BaseTexture.defaultOptions.alphaMode = PIXI.ALPHA_MODES.NO_PREMULTIPLIED_AL
 try {
     const _ImageResource = (PIXI as any).ImageResource;
     const _CanvasResource = (PIXI as any).CanvasResource;
-    
+
     if (_ImageResource) {
         const oldTest = _ImageResource.test;
         _ImageResource.test = (source: any) => {
@@ -20,7 +20,7 @@ try {
             return oldTest ? oldTest(source) : false;
         };
     }
-    
+
     if (_CanvasResource) {
         const oldTest = _CanvasResource.test;
         _CanvasResource.test = (source: any) => {
@@ -49,22 +49,22 @@ const initGame = async () => {
     // 1. 初始化存档
     SaveManager.load();
 
-    const isWX = typeof (window as any).wx !== 'undefined' || 
-                 (typeof (window as any).GameGlobal !== 'undefined') || 
-                 (typeof global !== 'undefined' && (global as any).wx !== 'undefined');
+    const isWX = typeof (window as any).wx !== 'undefined' ||
+        (typeof (window as any).GameGlobal !== 'undefined') ||
+        (typeof global !== 'undefined' && (global as any).wx !== 'undefined');
     const _window = (typeof window !== 'undefined' ? window : (typeof (window as any).GameGlobal !== 'undefined' ? (window as any).GameGlobal : (typeof global !== 'undefined' ? global : {}))) as any;
-    
+
     const canvas = _window.canvas || (typeof document !== 'undefined' ? document.createElement('canvas') : null);
-    
-    if (canvas && ! (window as any).canvas && typeof document !== 'undefined' && document.body) {
+
+    if (canvas && !(window as any).canvas && typeof document !== 'undefined' && document.body) {
         document.body.appendChild(canvas);
         document.body.style.margin = '0';
         document.body.style.overflow = 'hidden';
     }
-    
+
     if (canvas.style) canvas.style.touchAction = 'none';
     if (canvas.style) canvas.style.background = 'transparent';
-    
+
     // 微信真机修复：用实际游戏 canvas 替换 PIXI 内部 WebGL 探测逻辑
     // (真机上 document.createElement('canvas') 创建的第二个 canvas 不支持 WebGL)
     if (isWX) {
@@ -83,11 +83,11 @@ const initGame = async () => {
         view: canvas,
         width: window.innerWidth,
         height: window.innerHeight,
-        resolution: window.devicePixelRatio || 1,
+        resolution: Math.max(window.devicePixelRatio || 1, 2), // 提升保底分辨率，增加画质
         autoDensity: true,
         backgroundAlpha: isWX ? 1 : 0, // 微信端使用实心背景，浏览器端透明以支持视频
         backgroundColor: 0x00050a,     // 深海底色
-        antialias: false,
+        antialias: true, // 开启抗锯齿，大幅提升模型和特效边缘清晰度
     });
 
     // body 默认深海色（普通地图的底色）
@@ -106,7 +106,7 @@ const initGame = async () => {
     loadingLayer.addChild(loadBg);
 
     const barWidth = 600;
-    const barFrame = new PIXI.Graphics().lineStyle(2, 0x00f0ff, 0.5).drawRoundedRect(960 - barWidth/2, 600, barWidth, 20, 10);
+    const barFrame = new PIXI.Graphics().lineStyle(2, 0x00f0ff, 0.5).drawRoundedRect(960 - barWidth / 2, 600, barWidth, 20, 10);
     const progressBar = new PIXI.Graphics();
     const loadText = new PIXI.Text('正在检测海域异常状态...', {
         fontFamily: 'Verdana', fontSize: 24, fill: 0x00f0ff, fontWeight: 'bold'
@@ -118,7 +118,7 @@ const initGame = async () => {
     await AssetManager.init(app.renderer as PIXI.Renderer, (p) => {
         const percent = Math.floor(p * 100);
         loadText.text = `深度同步中... ${percent}%`;
-        progressBar.clear().beginFill(0x00f0ff, 0.8).drawRoundedRect(960 - barWidth/2, 600, barWidth * p, 20, 10).endFill();
+        progressBar.clear().beginFill(0x00f0ff, 0.8).drawRoundedRect(960 - barWidth / 2, 600, barWidth * p, 20, 10).endFill();
     });
 
     // 加载完成，淡出加载界面
@@ -161,7 +161,7 @@ const initGame = async () => {
 
         // 清理 UI (隐藏菜单)
         UIManager.hideAll();
-        
+
         // 渲染器清理（防止视频残留）
         const video = document.getElementById('bg-video');
         if (video) video.remove();
@@ -176,7 +176,7 @@ const initGame = async () => {
         // 从配置读取地图定义，获取视频地址
         const mapDef = getMap(config.id);
         const videoUrl = !isWX && mapDef?.videoUrl;
-        
+
         if (videoUrl && typeof document !== 'undefined' && document.body) {
             const video = document.createElement('video');
             video.id = 'bg-video';
@@ -191,10 +191,10 @@ const initGame = async () => {
             // 只有当视频正式开始播放时，才隐藏 PIXI 静态背景，实现无缝切换
             video.onplaying = () => {
                 app.renderer.background.alpha = 0;
-                SceneManager.setBackground(''); 
+                SceneManager.setBackground('');
                 if (document.body.style) document.body.style.background = 'transparent';
             };
-            
+
             document.body.insertBefore(video, document.body.firstChild);
             video.play().catch(e => {
                 console.warn('Video autoplay failed, staying with static image:', e);
@@ -206,12 +206,12 @@ const initGame = async () => {
 
 
 
-        
+
         // 启动新控制器 (传入完成后返回菜单的回调)
         activeController = new GameController(app, config, dialogue, () => {
             SceneManager.isGaming = false; // 返回大厅，回显氛围鱼
             UIManager.showMapSelection(onMapSelected);
-            SceneManager.setBackground('bg_ocean'); 
+            SceneManager.setBackground('bg_ocean');
         });
 
         talentManager.syncToWindow();
@@ -242,7 +242,7 @@ const initGame = async () => {
             Object.assign(v.style, { position: 'fixed', top: '0', left: '0', width: '100%', height: '100%', objectFit: 'cover', zIndex: '1' });
             v.onplaying = () => { app.renderer.background.alpha = 0; SceneManager.setBackground(''); };
             document.body.insertBefore(v, document.body.firstChild);
-            v.play().catch(() => {});
+            v.play().catch(() => { });
         } else {
             app.renderer.background.alpha = 1;
         }
