@@ -114,9 +114,10 @@ export class CombatSystem {
         const targets = candidates.slice(0, maxCount);
 
         for (const t of targets) {
+            // 一次性的瞬间受击，后续 3秒的连线效果交给 StatusSystem 处理
             this.effects.spawnLightning(startFish.x, startFish.y, t.fish.x, t.fish.y, true);
             this.applyDamage(t.fish, branchDmg);
-            this.status.applyElectrocute(t.fish, branchDmg);
+            this.status.applyElectrocute(t.fish, branchDmg, startFish);
         }
     }
 

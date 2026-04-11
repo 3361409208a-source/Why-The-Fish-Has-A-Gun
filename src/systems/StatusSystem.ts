@@ -10,14 +10,14 @@ export class StatusSystem {
         private ctx: GameContext,
         private effects: EffectSystem,
         private applyDamage: DamageApplier,
-    ) {}
+    ) { }
 
     update(delta: number): void {
         this.updateElectrocute(delta);
         this.updateCorrode(delta);
     }
 
-    applyElectrocute(fish: Fish, baseHitDmg: number): void {
+    applyElectrocute(fish: Fish, baseHitDmg: number, sourceFish?: Fish): void {
         // 3秒持续电击：总DOT=命中伤害的60%，按0.25s跳一次（12跳）
         const totalFrames = 180;
         const ticks = 12;
@@ -34,6 +34,9 @@ export class StatusSystem {
 
         const e: ElectrocuteEffect = {
             fish,
+            sourceFish,
+            fallbackX: sourceFish?.x,
+            fallbackY: sourceFish?.y,
             remainingFrames: totalFrames,
             tickFrames: 15,
             dmgPerTick,
@@ -79,15 +82,20 @@ export class StatusSystem {
             e.fxFrames -= delta;
             e.sfxFrames -= delta;
 
-            // 持续电流：在3秒内持续生成电弧/粒子（比掉血跳数更密）
-            for (let k = 0; e.fxFrames <= 0 && k < 6; k++) {
-                e.fxFrames += 3; // ~20次/秒
-                const fxX = e.fish.x;
-                const fxY = e.fish.y;
-                const jx = (Math.random() - 0.5) * 110;
-                const jy = (Math.random() - 0.5) * 80;
-                this.effects.spawnLightning(fxX + jx, fxY + jy, fxX - jx, fxY - jy);
-                this.effects.spawnParticles(fxX, fxY, 1, 0x88eeff, 3);
+            // 持续电流：不再在单个鱼身上一直闪电击效果，而是画出真正的分叉电流持续 3s
+            for (let k = 0; e.fxFrames <= 0 && k < 1; k++) {
+                e.fxFrames += 10; // ~6次/秒（即让闪电保持高速跳闪而不瞎眼）
+
+                if (e.sourceFish) {
+                    let sx = e.sourceFish.isActive ? e.sourceFish.x : (e.fallbackX || e.sourceFish.x);
+                    let sy = e.sourceFish.isActive ? e.sourceFish.y : (e.fallbackY || e.sourceFish.y);
+                    this.effects.spawnLightning(sx, sy, e.fish.x, e.fish.y, true);
+
+                    if (e.sourceFish.isActive) {
+                        e.fallbackX = sx;
+                        e.fallbackY = sy;
+                    }
+                }
             }
 
             // 持续电流音：限频播放，避免爆音（AssetManager 内还有全局节流/降音量）

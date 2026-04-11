@@ -14,6 +14,9 @@ import type { PoolManager } from '../PoolManager';
 
 export interface ElectrocuteEffect {
     fish: Fish;
+    sourceFish?: Fish;
+    fallbackX?: number;
+    fallbackY?: number;
     remainingFrames: number;
     tickFrames: number;
     dmgPerTick: number;
