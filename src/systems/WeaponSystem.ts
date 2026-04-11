@@ -116,13 +116,12 @@ export class WeaponSystem {
         const id = this.ctx.unlockedWeapons[this.ctx.currentWeaponIndex];
         const lvl = this.ctx.weaponLevels[id] || 1;
 
-        // 闪电武器：轨道停在炮台锚点（旋转中心），无需偏移；其他武器从炮眼发射
-        const firePos = id === 'lightning'
-            ? { x: this.ctx.cannon.x, y: this.ctx.cannon.y }
-            : this.ctx.cannon.getMuzzlePosition();
+        const cannonCenter = { x: this.ctx.cannon.x, y: this.ctx.cannon.y };
+        const muzzlePos = this.ctx.cannon.getMuzzlePosition();
 
-        // 闪电武器：射线与鱼碰撞体求交，取射线上最近的命中鱼（不自动追踪）
+        // 闪电武器：射线与鱼碰撞体求交，取射线上最近的命中鱼（绝对直线判定，不自动追踪）
         let lightningTarget = undefined;
+        let lightningDist = Infinity;
         if (id === 'lightning') {
             const aimAngle = this.ctx.cannon.getFireAngle();
             const aimDx = Math.cos(aimAngle);
@@ -135,14 +134,15 @@ export class WeaponSystem {
                 const dot = dx * aimDx + dy * aimDy;
                 if (dot <= 0) continue; // 炮台背后跳过
                 const perp = Math.abs(dx * aimDy - dy * aimDx); // 鱼心到射线的垂直距离
-                // 手感大幅度优化：将容错宽度拉大并施加基础判定值，使其像粗壮等离子束般拥有优秀的锁定追踪能力
-                if (perp <= f.hitRadius * 1.5 + 80 && dot < minDot) { // 射线穿过鱼体附带大范围自动索敌
+                // 完全移除自瞄：只有精准穿过目标的碰撞半径才判定命中
+                if (perp <= f.hitRadius && dot < minDot) {
                     minDot = dot;
                     lightningTarget = f;
                 }
             }
-
-            // 不兜底：允许打空，避免任何形式的自瞄
+            if (lightningTarget) {
+                lightningDist = minDot;
+            }
         }
 
         const b = this.ctx.pool.get('bullet', () => new Bullet());
@@ -150,7 +150,8 @@ export class WeaponSystem {
         const dmgMult = (window as any).TalentDmgMult || 1.0;
         const speedMult = (window as any).TalentSpeedMult || 1.0;
         b.setType(id, lvl, dmgMult, speedMult);
-        b.fire(firePos.x, firePos.y, angle, lightningTarget);
+        // 传入炮眼位置和纯直线打击距离，做到与武器动画物理脱钩
+        b.fire(muzzlePos.x, muzzlePos.y, angle, lightningTarget, lightningDist);
         this.ctx.cannon.triggerFire(id);
         // lightning: 发射使用通用 shoot；持续电击的电流音由 CombatSystem 的 DOT 期间播放
         // 其他武器: 每次最多播0.05s短促射击音，noOverlap限速上限防高射速武器爆音
@@ -160,13 +161,10 @@ export class WeaponSystem {
             id === 'lightning' ? 0.07 : 0.05,
             true
         );
-        // 闪电命中(锁定目标)：环绕电弧放 UI 层，避免被炮台遮住
-        // 闪电打空(无目标)：放回 Bullet 层，避免压在炮台上层
-        const layer =
-            id === 'lightning' && lightningTarget ? Layers.UI :
-                Layers.Bullet;
+        // 闪电打出后的所有特效图层下放至后台（Game层），避免在视觉上压在武器或UI之上
+        const layer = id === 'lightning' ? Layers.Game : Layers.Bullet;
         SceneManager.getLayer(layer).addChild(b);
         this.ctx.bullets.push(b);
-        this.effects.spawnParticles(firePos.x + Math.cos(angle) * 40, firePos.y + Math.sin(angle) * 40, 2, 0xffffff, 2);
+        this.effects.spawnParticles(muzzlePos.x + Math.cos(angle) * 40, muzzlePos.y + Math.sin(angle) * 40, 2, 0xffffff, 2);
     }
 }

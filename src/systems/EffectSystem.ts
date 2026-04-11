@@ -32,7 +32,7 @@ export class EffectSystem {
         const l = this.ctx.pool.get('lightning', () => new Lightning());
         if (l) {
             l.spawn(x1, y1, x2, y2, isSub);
-            SceneManager.getLayer(Layers.FX).addChild(l);
+            SceneManager.getLayer(Layers.Game).addChild(l); // 闪电放至Game层，确保不会遮挡前端武器
             this.ctx.lightnings.push(l);
         }
     }

@@ -14,13 +14,11 @@ export class Bullet extends PIXI.Sprite {
     private vy: number = 0;
     private trailTimer: number = 0;
     public weaponType: string = '';
-    private originX: number = 0;
-    private originY: number = 0;
+    public targetFish: Fish | null = null;
+    public hitDistance: number = Infinity;
+    public hasHit: boolean = false;
     private fireAngle: number = 0;
     private arcGfx: PIXI.Graphics | null = null;
-    public targetFish: Fish | null = null;  // 闪电武器：锁定主目标
-    private orbitAngle: number = 0;
-    public hasHit: boolean = false;
 
     constructor() {
         super(AssetManager.textures['bullet_v2']);
@@ -49,7 +47,6 @@ export class Bullet extends PIXI.Sprite {
             this.arcGfx.clear();
             this.scale.set(1);
             this.alpha = 1;
-            this.orbitAngle = Math.random() * Math.PI * 2;
         } else {
             this.alpha = 1;
             this.texture = AssetManager.textures[bulletKey] || AssetManager.textures['bullet_v2'];
@@ -69,21 +66,25 @@ export class Bullet extends PIXI.Sprite {
         this.speed = baseSpeed * speedMult * (1 + bonus * BULLET_LEVEL.speedPerLevel);
     }
 
-    public fire(x: number, y: number, angle: number, target?: Fish): void {
-        this.originX = x;
-        this.originY = y;
+    public fire(x: number, y: number, angle: number, target?: Fish, hitDistance?: number): void {
         this.fireAngle = angle;
         this.targetFish = target || null;
+        this.hitDistance = hitDistance ?? Infinity;
 
         if (this.weaponType === 'lightning') {
-            // 环绕模式：停在炮台机身中心
+            // 闪电子弹即刻实例化在发射源（一般为炮管口），像真正的纯直线射线，不再强行绑定和追踪炮身动画
             this.x = x;
             this.y = y;
             this.vx = 0;
             this.vy = 0;
             this.rotation = 0;
+
+            if (this.arcGfx) {
+                this.drawStraightLightningZap();
+                this.arcGfx.alpha = 1;
+            }
         } else {
-            // 从炮眼位置出发（调用方已传入炮眼坐标）
+            // 普通子弹：子弹本体直接从炮眼出发
             this.x = x;
             this.y = y;
             this.vx = Math.cos(angle) * this.speed;
@@ -103,22 +104,11 @@ export class Bullet extends PIXI.Sprite {
         }
 
         if (this.weaponType === 'lightning') {
-            // 闪电武器：
-            // - 命中时：保持环绕电弧（主命中电弧由 CombatSystem.effects.spawnLightning 绘制）
-            // - 打空时：绘制朝发射方向的电弧射线，确保“打空也有动画”
+            // 极短暂的视觉残留，表现为瞬发电击！没有任何拖泥带水，不再偏移
+            const life = 4; // 只存活4帧
             if (this.arcGfx) {
-                if (this.targetFish) {
-                    this.drawLightningOrbit();
-                    this.arcGfx.alpha = 1;
-                } else {
-                    // 打空：保持同样电弧风格，但只做“瞬发短闪”，不在炮口停留
-                    this.drawLightningArc();
-                    const missLife = 10; // ~0.16s @60fps
-                    this.arcGfx.alpha = Math.max(0, 1 - this.trailTimer / missLife);
-                }
+                this.arcGfx.alpha = Math.max(0, 1 - this.trailTimer / life);
             }
-            // 命中：维持更久；打空：快速结束
-            const life = this.targetFish ? 48 : 10;
             if (this.trailTimer > life) {
                 this.kill();
                 return;
@@ -143,159 +133,52 @@ export class Bullet extends PIXI.Sprite {
         }
     }
 
-    /** 环绕模式：围绕炮台中心绘制旋转多向电弧 */
-    private drawLightningOrbit(): void {
-        const g = this.arcGfx!;
-        g.clear();
-        this.orbitAngle += 0.10;
-
-        const numArcs = 5;
-        const outerR = 90 + Math.sin(this.orbitAngle * 2.3) * 18;
-
-        for (let i = 0; i < numArcs; i++) {
-            const angle = this.orbitAngle + (i * Math.PI * 2 / numArcs);
-            const ex = Math.cos(angle) * outerR;
-            const ey = Math.sin(angle) * outerR;
-            this.drawOrbitSegment(g, ex, ey);
-        }
-
-        // 中心发光点
-        g.beginFill(0x00ffff, 0.35);
-        g.drawCircle(0, 0, 14);
-        g.endFill();
-        g.beginFill(0xffffff, 0.8);
-        g.drawCircle(0, 0, 5);
-        g.endFill();
-    }
-
-    private drawOrbitSegment(g: PIXI.Graphics, ex: number, ey: number): void {
-        const dist = Math.sqrt(ex * ex + ey * ey);
-        if (dist < 2) return;
-        const pnX = -ey / dist;
-        const pnY = ex / dist;
-
-        const segments = 5;
-        const pts: [number, number][] = [[0, 0]];
-        for (let i = 1; i < segments; i++) {
-            const t = i / segments;
-            const off = (Math.random() - 0.5) * 22;
-            pts.push([ex * t + pnX * off, ey * t + pnY * off]);
-        }
-        pts.push([ex, ey]);
-
-        g.lineStyle(9, 0x00ffff, 0.18);
-        g.moveTo(pts[0][0], pts[0][1]);
-        for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
-
-        g.lineStyle(3.5, 0x88eeff, 0.75);
-        g.moveTo(pts[0][0], pts[0][1]);
-        for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
-
-        g.lineStyle(1.5, 0xffffff, 1.0);
-        g.moveTo(pts[0][0], pts[0][1]);
-        for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
-    }
-
-    /** 特斯拉线圈模式：绘制从炮台到当前位置（目标）的电弧（保留备用） */
-    private drawLightningBeam(): void {
+    /** 真正笔直的瞬发闪电电弧 */
+    private drawStraightLightningZap(): void {
         const g = this.arcGfx!;
         g.clear();
 
-        // 起点：炮口位置（本地坐标系）
-        const sx = this.originX - this.x;
-        const sy = this.originY - this.y;
-        const ex = 0;
-        const ey = 0;
-
-        const dist = Math.sqrt(sx * sx + sy * sy);
-        if (dist < 2) return;
-
-        // 垂直方向单位向量（锯齿偏移用）
-        const pnX = -sy / dist;
-        const pnY = sx / dist;
-
-        // 电弧持续期间保持全亮，最后快速淡出
-        const fade = this.trailTimer > 200 ? Math.max(0, 1 - (this.trailTimer - 200) / 40) : 1;
-        if (fade <= 0) return;
-
-        const segments = 10;
-        const pts: [number, number][] = [[sx, sy]];
-        for (let i = 1; i < segments; i++) {
-            const t = i / segments;
-            const mx = sx * (1 - t);
-            const my = sy * (1 - t);
-            // 锯齿幅度与距离成正比，每帧随机变化实现电流颤动
-            const off = (Math.random() - 0.5) * Math.min(50, dist * 0.25);
-            pts.push([mx + pnX * off, my + pnY * off]);
-        }
-        pts.push([ex, ey]);
-
-        // 外发光
-        g.lineStyle(10, 0x00ffff, 0.2 * fade);
-        g.moveTo(pts[0][0], pts[0][1]);
-        for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
-
-        // 中层蓝白电弧
-        g.lineStyle(4, 0x88eeff, 0.8 * fade);
-        g.moveTo(pts[0][0], pts[0][1]);
-        for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
-
-        // 高亮白芯
-        g.lineStyle(2, 0xffffff, fade);
-        g.moveTo(pts[0][0], pts[0][1]);
-        for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
-    }
-
-    private drawLightningArc(): void {
-        const g = this.arcGfx!;
-        g.clear();
-
-        // 电弧立即全长射出：从炮口(origin)沿发射方向延伸固定距离
-        // 打空时也要穿过整个屏幕：用屏幕对角线动态计算
+        // 打空穿过屏幕对角线，击中则截断在击中点
         const maxDist = Math.hypot(SceneManager.width, SceneManager.height) * 2;
+        const actualDist = Math.min(this.hitDistance, maxDist);
+
         const cosA = Math.cos(this.fireAngle);
         const sinA = Math.sin(this.fireAngle);
 
-        // 起点（炮口）在本地坐标（本地原点 = 子弹当前位置）
-        const sx = this.originX - this.x;
-        const sy = this.originY - this.y;
-        // 终点：从炮口延伸 maxDist
-        const ex = sx + cosA * maxDist;
-        const ey = sy + sinA * maxDist;
+        const sx = 0;
+        const sy = 0;
+        const ex = sx + cosA * actualDist;
+        const ey = sy + sinA * actualDist;
 
-        // 垂直方向（锯齿偏移）
-        const pnX = -sinA;
-        const pnY = cosA;
-
-        // 透明度随时间淡出（trailTimer 60帧内全亮，之后快速衰减）
-        const fade = Math.max(0, 1 - this.trailTimer / 80);
-        if (fade <= 0) return;
-
-        const segments = 9;
-        const pts: [number, number][] = [[sx, sy]];
-        for (let i = 1; i < segments; i++) {
-            const t = i / segments;
-            const mx = sx + (ex - sx) * t;
-            const my = sy + (ey - sy) * t;
-            const off = (Math.random() - 0.5) * 40;
-            pts.push([mx + pnX * off, my + pnY * off]);
+        // 借用原版混沌随机折线的经典美感！
+        const jitter = 35;
+        g.lineStyle(8, 0x00ffff, 0.4);
+        g.moveTo(sx, sy);
+        const segments = 6;
+        for (let i = 1; i <= segments; i++) {
+            const tx = sx + (ex - sx) * (i / segments) + (Math.random() - 0.5) * jitter;
+            const ty = sy + (ey - sy) * (i / segments) + (Math.random() - 0.5) * jitter;
+            g.lineTo(tx, ty);
         }
-        pts.push([ex, ey]);
+        g.lineTo(ex, ey);
 
-        // 外发光
-        g.lineStyle(8, 0x00ffff, 0.18 * fade);
-        g.moveTo(pts[0][0], pts[0][1]);
-        for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+        g.lineStyle(3, 0x88eeff, 0.8);
+        g.moveTo(sx, sy);
+        for (let i = 1; i <= segments; i++) {
+            const tx = sx + (ex - sx) * (i / segments) + (Math.random() - 0.5) * jitter;
+            const ty = sy + (ey - sy) * (i / segments) + (Math.random() - 0.5) * jitter;
+            g.lineTo(tx, ty);
+        }
+        g.lineTo(ex, ey);
 
-        // 中层蓝白
-        g.lineStyle(3, 0x88eeff, 0.75 * fade);
-        g.moveTo(pts[0][0], pts[0][1]);
-        for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
-
-        // 白芯
-        g.lineStyle(1.5, 0xffffff, fade);
-        g.moveTo(pts[0][0], pts[0][1]);
-        for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+        g.lineStyle(1.5, 0xffffff, 1.0);
+        g.moveTo(sx, sy);
+        for (let i = 1; i <= segments; i++) {
+            const tx = sx + (ex - sx) * (i / segments) + (Math.random() - 0.5) * jitter;
+            const ty = sy + (ey - sy) * (i / segments) + (Math.random() - 0.5) * jitter;
+            g.lineTo(tx, ty);
+        }
+        g.lineTo(ex, ey);
     }
 
     public kill(): void {

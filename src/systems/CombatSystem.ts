@@ -37,8 +37,8 @@ export class CombatSystem {
                 b.hasHit = true;
                 const id = this.ctx.unlockedWeapons[this.ctx.currentWeaponIndex];
                 const lvl = this.ctx.weaponLevels[id] || 1;
-                // 从炮台轨道中心射出主电弧到目标鱼
-                this.effects.spawnLightning(b.x, b.y, target.x, target.y);
+                // 主电弧现在由 Bullet.ts 内部每帧动态绘制并绑定武器坐标，不再生成脱离的附着特效
+                // this.effects.spawnLightning(b.originX, b.originY, target.x, target.y);
                 this.onHitEffect(id, target.x, target.y, lvl);
                 const dmgMult = (window as any).TalentDmgMult || 1.0;
                 const hitDmg = b.damage * dmgMult;
