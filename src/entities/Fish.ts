@@ -15,7 +15,7 @@ export class Fish extends PIXI.Sprite {
     private behaviorTimer: number = 0;
     private isDashing: boolean = false;
     private dashTargetSpeed: number = 0;
-    
+
     // 垂直游动与漂浮策略
     private verticalVelocity: number = 0;
     private targetY: number = 0;
@@ -31,7 +31,6 @@ export class Fish extends PIXI.Sprite {
 
     private mesh: PIXI.SimpleRope | null = null;
     private meshPoints: PIXI.Point[] = [];
-    private static _sharedFilter: PIXI.Filter;
 
     public get width(): number { return this.mesh ? Math.abs(this.mesh.width * this.scale.x) : 0; }
     public get height(): number { return this.mesh ? Math.abs(this.mesh.height * this.scale.y) : 0; }
@@ -39,23 +38,6 @@ export class Fish extends PIXI.Sprite {
     constructor() {
         super();
         this.anchor.set(0.5);
-        if (!Fish._sharedFilter) {
-            const shaderFrag = `
-                varying vec2 vTextureCoord;
-                uniform sampler2D uSampler;
-                uniform float uHitEffect;
-                void main(void) {
-                    vec4 color = texture2D(uSampler, vTextureCoord);
-                    if(color.a < 0.01) discard; // 仅保留基础透明度剔除
-                    if(uHitEffect > 0.05) {
-                        color.rgb *= (1.0 + uHitEffect * 1.5);
-                        color.r += uHitEffect * 0.4;
-                    }
-                    gl_FragColor = color;
-                }
-            `;
-            Fish._sharedFilter = new PIXI.Filter(undefined, shaderFrag, { uHitEffect: 0 });
-        }
     }
 
     public spawn(x: number, y: number, side: 'left' | 'right', isBoss: boolean = false, isMinion: boolean = false, forceBossKey?: string): void {
@@ -161,7 +143,7 @@ export class Fish extends PIXI.Sprite {
             this.originalSpeed *= (1.0 + (1.0 - hpRoll) * 0.4);
         } else if (isMinion) {
             this.bossKey = 'minion';
-            tex = AssetManager.textures['fish_tuna']; 
+            tex = AssetManager.textures['fish_tuna'];
             this.hp = 1; this.originalSpeed = 4.0 + Math.random() * 3.0;
             const w = tex ? (tex.width || 1024) : 1024;
             baseScale = 0.3 * (100 / w);
@@ -171,14 +153,14 @@ export class Fish extends PIXI.Sprite {
             const speciesRand = Math.random();
             if (speciesRand < 0.15) {
                 // 原有灯笼鱼 -> 升级为 科技狙击灯笼鱼
-                tex = AssetManager.textures['fish_tech_angler'] || AssetManager.textures['fish_angler']; 
+                tex = AssetManager.textures['fish_tech_angler'] || AssetManager.textures['fish_angler'];
                 this.hp = 200; // 稍微更肉一点
                 this.originalSpeed = 1.3;
                 const w = tex ? (tex.width || 1024) : 1024;
                 baseScale = 0.7 * (120 / w);
             } else if (speciesRand < 0.30) {
                 // 原有水母
-                this.fishType = 'jelly'; tex = AssetManager.textures['fish_jelly']; 
+                this.fishType = 'jelly'; tex = AssetManager.textures['fish_jelly'];
                 this.hp = 50; this.originalSpeed = 0.4;
                 const w = tex ? (tex.width || 1024) : 1024;
                 baseScale = 1.0 * (100 / w);
@@ -221,13 +203,12 @@ export class Fish extends PIXI.Sprite {
         for (let i = 0; i < segmentCount; i++) {
             this.meshPoints.push(new PIXI.Point(i * segmentWidth, 0));
         }
-        
+
         this.mesh = new PIXI.SimpleRope(tex, this.meshPoints);
-        this.mesh.filters = [Fish._sharedFilter];
         this.mesh.scale.set(baseScale);
         this.mesh.x = - (texW * baseScale) / 2;
         this.addChild(this.mesh);
-        
+
         // 真正的全方位对向游走逻辑：游向出生点的正对面
         let tx: number, ty: number;
         if (y < -100) { // 顶部出生 -> 游向底部
@@ -239,7 +220,7 @@ export class Fish extends PIXI.Sprite {
         } else { // 右侧出生 -> 游向左侧
             tx = -300; ty = y + (Math.random() - 0.5) * 400;
         }
-        
+
         const angle = Math.atan2(ty - y, tx - x);
         this.vx = Math.cos(angle) * this.originalSpeed;
         this.vy = Math.sin(angle) * this.originalSpeed;
@@ -280,7 +261,7 @@ export class Fish extends PIXI.Sprite {
         // 冲刺行为
         if (!this.isBoss && !this.isMinion && this.fishType !== 'jelly' && this.behaviorTimer > 150) {
             if (Math.random() < 0.2) {
-                this.isDashing = true; 
+                this.isDashing = true;
                 this.dashTargetSpeed = this.originalSpeed * (2.2 + Math.random() * 1.2);
                 this.behaviorTimer = 0; this.targetY += (Math.random() - 0.5) * 200;
             } else this.behaviorTimer = 80;
@@ -300,17 +281,17 @@ export class Fish extends PIXI.Sprite {
         // 限制在画面内 (适配 1920x1080)
         this.y = Math.max(-300, Math.min(SceneManager.height + 300, this.y));
 
-        let swimTickRate = (this.isDashing || this.isMinion) ? 0.25 : 0.1; 
+        let swimTickRate = (this.isDashing || this.isMinion) ? 0.25 : 0.1;
         if (this.fishType === 'jelly') swimTickRate = 0.05;
         this.swayTimer += delta * swimTickRate;
-        const t = this.swayTimer; 
+        const t = this.swayTimer;
 
         if (this.mesh) {
             const isHit = this.hitTimer > 0;
             const hitFactor = isHit ? (this.hitTimer / 15) : 0;
-            
+
             if (this.fishType === 'jelly') {
-                const pulse = (Math.sin(this.swayTimer * 3.0) + 1) / 2; 
+                const pulse = (Math.sin(this.swayTimer * 3.0) + 1) / 2;
                 this.mesh.scale.x = (1.0 * (100 / this.mesh.texture.width)) * (0.8 + pulse * 0.4);
                 for (let i = 0; i < this.meshPoints.length; i++) {
                     const bodyFactor = (i / this.meshPoints.length);
@@ -319,7 +300,7 @@ export class Fish extends PIXI.Sprite {
             } else {
                 const dashFactor = (this.isDashing || this.isMinion) ? 0.8 : 0;
                 const isTitan = this.bossKey && this.bossKey.startsWith('titan');
-                const baseAmp = (this.bossKey === 'dragon' || isTitan ? 35 : 12) * (1 + hitFactor * 0.2 + dashFactor * 0.5); 
+                const baseAmp = (this.bossKey === 'dragon' || isTitan ? 35 : 12) * (1 + hitFactor * 0.2 + dashFactor * 0.5);
                 const baseFreq = (this.bossKey === 'dragon' || isTitan ? 0.25 : 0.6) * (1 + dashFactor * 0.4);
                 for (let i = 0; i < this.meshPoints.length; i++) {
                     this.meshPoints[i].y = Math.sin(t + i * baseFreq) * baseAmp * (0.4 + (i / this.meshPoints.length));
@@ -331,15 +312,21 @@ export class Fish extends PIXI.Sprite {
         if (this.hitTimer > 0) {
             this.hitTimer -= delta;
             hitShakeX = (Math.random() - 0.5) * 12; hitShakeY = (Math.random() - 0.5) * 12;
-            Fish._sharedFilter.uniforms.uHitEffect = this.hitTimer / 15;
-            if (this.hitTimer <= 0) Fish._sharedFilter.uniforms.uHitEffect = 0;
+            if (this.mesh) {
+                // Reddish tint for hit effect
+                this.mesh.tint = 0xff8888;
+            }
+        } else {
+            if (this.mesh && this.mesh.tint !== 0xffffff) {
+                this.mesh.tint = 0xffffff;
+            }
         }
 
         // 真正的 2D 对向位移
         const speedRatio = this.speed / this.originalSpeed;
         // 如果垂直速度分量 vy 已经很大，则大幅减弱追踪逻辑 verticalVelocity，防止速度叠加速率过快
         const vTrackComp = Math.abs(this.vy) > 0.2 ? this.verticalVelocity * 0.1 : this.verticalVelocity;
-        
+
         this.x += this.vx * speedRatio * delta + hitShakeX;
         this.y += (this.vy * speedRatio + vTrackComp) * delta + hitShakeY;
 
@@ -347,7 +334,7 @@ export class Fish extends PIXI.Sprite {
         const totalVy = this.vy * speedRatio + vTrackComp;
         const totalVx = this.vx * speedRatio;
         const rotationAngle = Math.atan2(totalVy, totalVx);
-        
+
         if (totalVx > 0) {
             // 向右游：资产默认向左，需 scale.x = -1，旋转直接使用 angle
             this.scale.x = -1;
@@ -359,13 +346,13 @@ export class Fish extends PIXI.Sprite {
         }
 
         const margin = 800;
-        if (this.x < -margin || this.x > SceneManager.width + margin || 
+        if (this.x < -margin || this.x > SceneManager.width + margin ||
             this.y < -margin || this.y > SceneManager.height + margin) this.kill();
     }
 
     public takeDamage(dmg: number): boolean {
         this.hp -= dmg;
-        this.hitTimer = 15; 
+        this.hitTimer = 15;
         if (this.hp <= 0) { this.kill(); return true; }
         return false;
     }
