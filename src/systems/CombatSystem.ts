@@ -3,19 +3,29 @@ import { AssetManager } from '../AssetManager';
 import { Fish } from '../entities/Fish';
 import { EventBus } from '../core/EventBus';
 import { GameEvents } from '../core/GameEvents';
-import { COMBO, AOE, CHAIN, ECONOMY } from '../config/balance.config';
+import { COMBO, CHAIN, ECONOMY } from '../config/balance.config';
 import type { GameContext } from './GameContext';
 import type { EffectSystem } from './EffectSystem';
 import type { SpawnSystem } from './SpawnSystem';
+import type { StatusSystem } from './StatusSystem';
+import type { AttackSystem } from './AttackSystem';
+
+type DamageOptions = {
+    allowCrit?: boolean;
+    allowComboOnKill?: boolean;
+    showText?: boolean;
+};
 
 export class CombatSystem {
     constructor(
         private ctx: GameContext,
         private effects: EffectSystem,
-        private spawner: SpawnSystem
+        private spawner: SpawnSystem,
+        private status: StatusSystem,
+        private attacks: AttackSystem,
     ) {}
 
-    checkCollisions(): void {
+    checkCollisions(delta: number): void {
         for (const b of this.ctx.bullets) {
             if (!b.isActive) continue;
 
@@ -30,9 +40,10 @@ export class CombatSystem {
                 // 从炮台轨道中心射出主电弧到目标鱼
                 this.effects.spawnLightning(b.x, b.y, target.x, target.y);
                 this.onHitEffect(id, target.x, target.y, lvl);
-                AssetManager.playSound('lightning', 1, 1);
                 const dmgMult = (window as any).TalentDmgMult || 1.0;
-                this.applyDamage(target, b.damage * dmgMult);
+                const hitDmg = b.damage * dmgMult;
+                this.applyDamage(target, hitDmg);
+                this.status.applyElectrocute(target, hitDmg);
                 this.triggerChainLightning(target, CHAIN.baseTargets + lvl, b.damage * CHAIN.damageFalloff * dmgMult);
                 continue;
             }
@@ -49,22 +60,17 @@ export class CombatSystem {
                     const lvl = this.ctx.weaponLevels[id] || 1;
                     this.onHitEffect(id, f.x, f.y, lvl);
 
-                    if (id === 'heavy') {
-                        const rangeSq = Math.pow(AOE.baseRange + lvl * AOE.rangePerLevel, 2);
-                        for (const t of this.ctx.fishes) {
-                            if (!t.isActive) continue;
-                            const tdx = t.x - b.x;
-                            const tdy = t.y - b.y;
-                            if (tdx * tdx + tdy * tdy < rangeSq) {
-                                const dmgMult = (window as any).TalentDmgMult || 1.0;
-                                this.applyDamage(t, b.damage * AOE.damageFalloff * dmgMult);
-                            }
-                        }
-                    } else {
-                        AssetManager.playSound('hit');
-                        const dmgMult = (window as any).TalentDmgMult || 1.0;
-                        this.applyDamage(f, b.damage * dmgMult);
-                    }
+                    if (id !== 'heavy') AssetManager.playSound('hit');
+                    const dmgMult = (window as any).TalentDmgMult || 1.0;
+                    this.applyDamage(f, b.damage * dmgMult);
+                    this.attacks.onDirectHit({
+                        weaponId: id,
+                        level: lvl,
+                        bulletX: b.x,
+                        bulletY: b.y,
+                        baseDamage: b.damage,
+                        dmgMult,
+                    });
                     break;
                 }
             }
@@ -106,8 +112,8 @@ export class CombatSystem {
             }
             if (next) {
                 this.effects.spawnLightning(current.x, current.y, next.x, next.y);
-                AssetManager.playSound('lightning', 1, 3);
                 this.applyDamage(next, dmg);
+                this.status.applyElectrocute(next, dmg);
                 hitSet.add(next);
                 current = next;
                 count++;
@@ -115,22 +121,30 @@ export class CombatSystem {
         }
     }
 
-    applyDamage(fish: Fish, dmg: number): void {
+    applyDamage(fish: Fish, dmg: number, opts: DamageOptions = {}): void {
+        const allowCrit = opts.allowCrit ?? true;
+        const allowComboOnKill = opts.allowComboOnKill ?? true;
+        const showText = opts.showText ?? true;
+
         const comboBonus = 1 + Math.min(COMBO.maxDmgBonus, this.ctx.comboCount * COMBO.dmgBonusPerCombo);
-        const critChance = (window as any).TalentCritChance || 0;
+        const critChance = allowCrit ? ((window as any).TalentCritChance || 0) : 0;
         let finalDmg = dmg * comboBonus;
         let isCrit = false;
         if (Math.random() < critChance) { finalDmg *= 3.0; isCrit = true; }
 
-        const dmgText = `${Math.floor(finalDmg)}`;
-        const dmgColor = isCrit ? 0xff3300 : (this.ctx.comboCount > 20 ? 0xffcc00 : 0xffffff);
-        EventBus.emit(GameEvents.UI_FLOATING_TEXT, { x: fish.x, y: fish.y - fish.height / 2, text: dmgText, color: dmgColor, isCrit });
+        if (showText) {
+            const dmgText = `${Math.floor(finalDmg)}`;
+            const dmgColor = isCrit ? 0xff3300 : (this.ctx.comboCount > 20 ? 0xffcc00 : 0xffffff);
+            EventBus.emit(GameEvents.UI_FLOATING_TEXT, { x: fish.x, y: fish.y - fish.height / 2, text: dmgText, color: dmgColor, isCrit });
+        }
 
         const isDead = fish.takeDamage(finalDmg);
         if (isDead) {
-            this.ctx.comboCount++;
-            this.ctx.comboTimer = COMBO.timeoutFrames;
-            EventBus.emit(GameEvents.UI_COMBO, { count: this.ctx.comboCount });
+            if (allowComboOnKill) {
+                this.ctx.comboCount++;
+                this.ctx.comboTimer = COMBO.timeoutFrames;
+                EventBus.emit(GameEvents.UI_COMBO, { count: this.ctx.comboCount });
+            }
 
             const roll = Math.random();
             const goldMult = (window as any).TalentGoldMult || 1.0;

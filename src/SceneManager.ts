@@ -7,6 +7,7 @@ import { AssetManager } from './AssetManager';
 export enum Layers {
     Background = 'background',
     Game = 'game',
+    Player = 'player',
     Bullet = 'bullet', // 子弹层：在鱼（Game）上方，特效（FX）下方
     FX = 'fx',
     UI = 'ui',
@@ -81,6 +82,7 @@ export class SceneManager {
         // 1. 按层级顺序初始化容器
         this.createLayer(Layers.Background, 0); // 最底层
         this.createLayer(Layers.Game, 10);      // 鱼群
+        this.createLayer(Layers.Player, 15);    // 玩家炮台：在鱼上方、子弹下方
         this.createLayer(Layers.Bullet, 20);    // 子弹（强制在鱼上方）
         this.createLayer(Layers.FX, 30);        // 粒子特效
         this.createLayer(Layers.UI, 100);       // 最顶层

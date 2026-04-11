@@ -15,6 +15,8 @@ import { SpawnSystem } from './systems/SpawnSystem';
 import { CombatSystem } from './systems/CombatSystem';
 import { WeaponSystem } from './systems/WeaponSystem';
 import { InputSystem } from './systems/InputSystem';
+import { StatusSystem } from './systems/StatusSystem';
+import { AttackSystem } from './systems/AttackSystem';
 
 /**
  * GameController — 游戏会话协调层
@@ -25,6 +27,8 @@ export class GameController {
     private bridge: UIBridge;
     private effects: EffectSystem;
     private spawner: SpawnSystem;
+    private status: StatusSystem;
+    private attacks: AttackSystem;
     private combat: CombatSystem;
     private weapons: WeaponSystem;
     private input: InputSystem;
@@ -35,7 +39,7 @@ export class GameController {
         const cannon = new Cannon();
         cannon.x = SceneManager.width / 2;
         cannon.y = SceneManager.height - 20;
-        SceneManager.getLayer(Layers.UI).addChild(cannon);
+        SceneManager.getLayer(Layers.Player).addChild(cannon);
 
         this.ctx = {
             app,
@@ -43,6 +47,8 @@ export class GameController {
             cannon,
             fishes: [], bullets: [], cores: [],
             particles: [], shockwaves: [], lightnings: [],
+            electrified: [],
+            corroded: [],
             crystals: 2000,
             weaponLevels: {},
             unlockedWeapons: ['cannon_base', 'fish_tuna_mode', 'gatling', 'heavy', 'lightning'],
@@ -87,7 +93,13 @@ export class GameController {
         this.bridge.init();
         this.effects = new EffectSystem(this.ctx);
         this.spawner = new SpawnSystem(this.ctx, this.effects);
-        this.combat  = new CombatSystem(this.ctx, this.effects, this.spawner);
+        this.attacks = new AttackSystem(this.ctx, (fish, dmg) => {
+            this.combat.applyDamage(fish, dmg);
+        }, this.status);
+        this.status  = new StatusSystem(this.ctx, this.effects, (fish, dmg) => {
+            this.combat.applyDamage(fish, dmg, { allowCrit: false, allowComboOnKill: false, showText: true });
+        });
+        this.combat  = new CombatSystem(this.ctx, this.effects, this.spawner, this.status, this.attacks);
         this.weapons = new WeaponSystem(this.ctx, this.effects);
         this.input   = new InputSystem(app, cannon, () => this.ctx.isPaused, this.ctx);
 
@@ -210,24 +222,27 @@ export class GameController {
     }
 
     private update(delta: number): void {
-        if (this.ctx.frozenTime > 0) { this.ctx.frozenTime -= delta; return; }
+        // 防止切后台/卡顿导致 delta 巨大，从而“刚生成就被更新/销毁”，出现发射但看不到特效/子弹的情况
+        const dt = Math.min(delta, 3);
+        if (this.ctx.frozenTime > 0) { this.ctx.frozenTime -= dt; return; }
 
-        SceneManager.update(delta);
-        this.spawner.update(delta);
-        if (this.ctx.isAutoMode) this.weapons.handleAutoFire(delta);
+        SceneManager.update(dt);
+        this.spawner.update(dt);
+        if (this.ctx.isAutoMode) this.weapons.handleAutoFire(dt);
 
-        this.updateEntities(this.ctx.fishes, 'fish', delta);
-        this.updateEntities(this.ctx.bullets, 'bullet', delta);
-        this.updateEntities(this.ctx.cores, 'core', delta);
-        this.updateEntities(this.ctx.particles, 'particle', delta);
-        this.updateEntities(this.ctx.shockwaves, 'shockwave', delta);
-        this.updateEntities(this.ctx.lightnings, 'lightning', delta);
+        this.updateEntities(this.ctx.fishes, 'fish', dt);
+        this.updateEntities(this.ctx.bullets, 'bullet', dt);
+        this.updateEntities(this.ctx.cores, 'core', dt);
+        this.updateEntities(this.ctx.particles, 'particle', dt);
+        this.updateEntities(this.ctx.shockwaves, 'shockwave', dt);
+        this.updateEntities(this.ctx.lightnings, 'lightning', dt);
 
         this.spawner.checkCorePickup();
-        this.combat.checkCollisions();
+        this.status.update(dt);
+        this.combat.checkCollisions(dt);
 
         if (this.ctx.comboTimer > 0) {
-            this.ctx.comboTimer -= delta;
+            this.ctx.comboTimer -= dt;
             if (this.ctx.comboTimer <= 0) {
                 this.ctx.comboCount = 0;
                 EventBus.emit(GameEvents.UI_COMBO, { count: 0 });

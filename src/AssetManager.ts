@@ -8,6 +8,8 @@ export class AssetManager {
     private static audioCtx: AudioContext;
     private static soundBuffers: { [key: string]: AudioBuffer } = {};
     private static soundEndTimes: { [key: string]: number } = {};
+    private static soundNextAllowedAt: { [key: string]: number } = {};
+    private static audioUnlocked: boolean = false;
 
     public static async init(renderer: PIXI.Renderer, onProgress?: (p: number) => void): Promise<void> {
         console.log('Starting asset initialization...');
@@ -68,7 +70,8 @@ export class AssetManager {
         // 关键：将 assets/xxx.png 映射到 COS 根目录下的 xxx.png (剥离 assets/ 路径)
         const getPath = (p: string) => {
             const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-            if (isLocal) return p; // 本地开发环境直接读取 assets 目录
+            // 本地开发环境直接读取 public/assets（Vite: public 下资源以 / 开头访问最稳）
+            if (isLocal) return p.startsWith('/') ? p : `/${p}`;
 
             const fileName = p.split('/').pop() || p;
             return REMOTE_BASE + fileName;
@@ -188,6 +191,18 @@ export class AssetManager {
         if (!this.audioCtx) return;
         if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
 
+        // 额外的限频节流（避免同一帧/短时间内被多处逻辑反复触发）
+        const nowSec = this.audioCtx.currentTime;
+        const throttleSec =
+            type === 'lightning' ? 0.20 :
+            type === 'shoot'     ? 0.03 :
+            0;
+        if (throttleSec > 0) {
+            const nextOk = this.soundNextAllowedAt[type] ?? 0;
+            if (nowSec < nextOk) return;
+            this.soundNextAllowedAt[type] = nowSec + throttleSec;
+        }
+
         // 优先播放真实音频 buffer
         if (this.soundBuffers[type]) {
             const now = this.audioCtx.currentTime;
@@ -197,12 +212,22 @@ export class AssetManager {
             src.buffer = this.soundBuffers[type];
             src.playbackRate.value = rate;
             const gain = this.audioCtx.createGain();
-            gain.gain.value = 0.4;
+            // 闪电音效更刺耳，默认压低音量
+            gain.gain.value =
+                type === 'lightning' ? 0.18 :
+                type === 'shoot'     ? 0.60 :
+                0.40;
             src.connect(gain);
             gain.connect(this.audioCtx.destination);
             const playDuration = duration ?? src.buffer.duration;
             this.soundEndTimes[type] = now + playDuration / rate;
-            src.start(now, 0, duration);
+            try {
+                // 某些环境下传入 undefined 作为 duration 会抛错，导致后续音效都失效
+                if (duration === undefined) src.start(now);
+                else src.start(now, 0, duration);
+            } catch (e) {
+                console.warn(`Sound start failed [${type}]`, e);
+            }
             return;
         }
 
@@ -214,7 +239,7 @@ export class AssetManager {
             case 'shoot':
                 osc.type = 'triangle'; osc.frequency.setValueAtTime(440, now);
                 osc.frequency.exponentialRampToValueAtTime(110, now + 0.1);
-                gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                gain.gain.setValueAtTime(0.14, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
                 osc.start(now); osc.stop(now + 0.1); break;
             case 'hit':
                 osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, now);
@@ -236,6 +261,25 @@ export class AssetManager {
                 osc.frequency.exponentialRampToValueAtTime(660, now + 0.2);
                 gain.gain.setValueAtTime(0.15, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
                 osc.start(now); osc.stop(now + 0.3); break;
+        }
+    }
+
+    /** 必须在用户手势回调中调用，确保浏览器允许播放声音 */
+    public static unlockAudio(): void {
+        if (!this.audioCtx || this.audioUnlocked) return;
+        this.audioUnlocked = true;
+        try {
+            if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+            const osc = this.audioCtx.createOscillator();
+            const gain = this.audioCtx.createGain();
+            gain.gain.value = 0; // 静音解锁
+            osc.connect(gain);
+            gain.connect(this.audioCtx.destination);
+            const now = this.audioCtx.currentTime;
+            osc.start(now);
+            osc.stop(now + 0.01);
+        } catch (e) {
+            // 解锁失败不影响后续逻辑，只是仍可能静音
         }
     }
 }

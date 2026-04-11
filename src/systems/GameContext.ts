@@ -12,6 +12,23 @@ import type { Lightning } from '../entities/Lightning';
 import type { Cannon } from '../entities/Cannon';
 import type { PoolManager } from '../PoolManager';
 
+export interface ElectrocuteEffect {
+    fish: Fish;
+    remainingFrames: number;
+    tickFrames: number;
+    dmgPerTick: number;
+    fxFrames: number;
+    sfxFrames: number;
+}
+
+export interface CorrodeEffect {
+    fish: Fish;
+    remainingFrames: number;
+    tickFrames: number;
+    dmgPerTick: number;
+    fxFrames: number;
+}
+
 export interface GameContext {
     app: PIXI.Application;
     pool: PoolManager;
@@ -23,6 +40,9 @@ export interface GameContext {
     particles: Particle[];
     shockwaves: Shockwave[];
     lightnings: Lightning[];
+    // 状态效果
+    electrified: ElectrocuteEffect[];
+    corroded: CorrodeEffect[];
     // 经济
     crystals: number;
     // 武器状态

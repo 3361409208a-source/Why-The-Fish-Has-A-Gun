@@ -31,18 +31,23 @@ export class FloatingText {
         this.renderLayer.addChild(t);
 
         let elapsed = 0;
-        const vy = -4 - Math.random() * 4;
-        const vx = (Math.random() - 0.5) * 3;
+        // 3秒持续展示时，避免文字“飞走”（太上/太下都不舒服）
+        const vy = -1.2 - Math.random() * 0.8;
+        const vx = (Math.random() - 0.5) * 1.2;
         t.scale.set(0.2);
+        const totalFrames = 180; // ~3s @ 60fps
+        const fadeStart = 120;   // start fading after ~2s
         const tick = () => {
             if (!t.parent) return;
             elapsed++;
-            t.x += vx;
-            t.y += vy + elapsed * 0.15;
+            // 前半段轻微漂浮，后半段趋于静止（减少“飞走感”）
+            const drift = elapsed < 45 ? 1 : Math.max(0, 1 - (elapsed - 45) / 45);
+            t.x += vx * drift;
+            t.y += vy * drift;
             if (elapsed < 10) t.scale.set(0.2 + (elapsed / 10) * (isCrit ? 1.2 : 0.8));
             if (isCrit) t.rotation = Math.sin(elapsed * 0.5) * 0.1;
-            if (elapsed > 40) t.alpha = 1 - (elapsed - 40) / 20;
-            if (elapsed < 60) requestAnimationFrame(tick);
+            if (elapsed > fadeStart) t.alpha = 1 - (elapsed - fadeStart) / (totalFrames - fadeStart);
+            if (elapsed < totalFrames) requestAnimationFrame(tick);
             else this.renderLayer.removeChild(t);
         };
         tick();

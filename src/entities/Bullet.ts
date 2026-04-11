@@ -100,11 +100,23 @@ export class Bullet extends PIXI.Sprite {
         }
 
         if (this.weaponType === 'lightning') {
-            // 环绕模式：停在炮台中心，绘制旋转环绕电弧
+            // 闪电武器：
+            // - 命中时：保持环绕电弧（主命中电弧由 CombatSystem.effects.spawnLightning 绘制）
+            // - 打空时：绘制朝发射方向的电弧射线，确保“打空也有动画”
             if (this.arcGfx) {
-                this.drawLightningOrbit();
+                if (this.targetFish) {
+                    this.drawLightningOrbit();
+                    this.arcGfx.alpha = 1;
+                } else {
+                    // 打空：保持同样电弧风格，但只做“瞬发短闪”，不在炮口停留
+                    this.drawLightningArc();
+                    const missLife = 10; // ~0.16s @60fps
+                    this.arcGfx.alpha = Math.max(0, 1 - this.trailTimer / missLife);
+                }
             }
-            if (this.trailTimer > 26) {
+            // 命中：维持更久；打空：快速结束
+            const life = this.targetFish ? 48 : 10;
+            if (this.trailTimer > life) {
                 this.kill();
                 return;
             }
@@ -236,7 +248,8 @@ export class Bullet extends PIXI.Sprite {
         g.clear();
 
         // 电弧立即全长射出：从炮口(origin)沿发射方向延伸固定距离
-        const maxDist = 750;
+        // 打空时也要穿过整个屏幕：用屏幕对角线动态计算
+        const maxDist = Math.hypot(SceneManager.width, SceneManager.height) * 2;
         const cosA = Math.cos(this.fireAngle);
         const sinA = Math.sin(this.fireAngle);
 

@@ -1,4 +1,5 @@
 import * as PIXI from 'pixi.js';
+import { AssetManager } from '../AssetManager';
 import type { Cannon } from '../entities/Cannon';
 import type { GameContext } from './GameContext';
 
@@ -25,6 +26,7 @@ export class InputSystem {
 
         this.app.stage.on('pointerdown', (e) => {
             if (this.isPaused()) return;
+            AssetManager.unlockAudio();
             this.isDragging = true;
             if (this.ctx) this.ctx.isManualAiming = true;
             onMove(e);
@@ -50,6 +52,7 @@ export class InputSystem {
             const wx = (window as any).wx;
             wx.onTouchStart((res: any) => {
                 if (this.isPaused()) return;
+                AssetManager.unlockAudio();
                 this.isDragging = true;
                 if (res.touches?.length > 0) {
                     const t = res.touches[0];

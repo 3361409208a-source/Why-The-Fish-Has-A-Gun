@@ -93,17 +93,6 @@ export class WeaponSystem {
         const def = getWeapon(id);
         if (!def) return;
 
-        // 自动瞄准最近的活跃鱼（闪电武器无需瞄准；玩家手动操作时不覆盖）
-        if (id !== 'lightning' && !this.ctx.isManualAiming) {
-            let nearest = null;
-            let minDist = Infinity;
-            for (const f of this.ctx.fishes) {
-                if (!f.isActive) continue;
-                const d = Math.hypot(f.x - this.ctx.cannon.x, f.y - this.ctx.cannon.y);
-                if (d < minDist) { minDist = d; nearest = f; }
-            }
-            if (nearest) this.ctx.cannon.lookAt(nearest.x, nearest.y);
-        }
 
         this.autoFireTimer += delta;
         const fireRateMult = (window as any).TalentFireRateMult || 1.0;
@@ -146,11 +135,14 @@ export class WeaponSystem {
                 const dot = dx * aimDx + dy * aimDy;
                 if (dot <= 0) continue; // 炮台背后跳过
                 const perp = Math.abs(dx * aimDy - dy * aimDx); // 鱼心到射线的垂直距离
-                if (perp <= f.hitRadius && dot < minDot) { // 射线穿过鱼体，取最近的
+                // 放宽一点容差，避免“发射了但锁不到目标”
+                if (perp <= f.hitRadius * 1.25 && dot < minDot) { // 射线穿过鱼体，取最近的
                     minDot = dot;
                     lightningTarget = f;
                 }
             }
+
+            // 不兜底：允许打空，避免任何形式的自瞄
         }
 
         const b = this.ctx.pool.get('bullet', () => new Bullet());
@@ -160,10 +152,20 @@ export class WeaponSystem {
         b.setType(id, lvl, dmgMult, speedMult);
         b.fire(firePos.x, firePos.y, angle, lightningTarget);
         this.ctx.cannon.triggerFire(id);
-        // lightning: 持续8s电流音，noOverlap防重叠
+        // lightning: 发射使用通用 shoot；持续电击的电流音由 CombatSystem 的 DOT 期间播放
         // 其他武器: 每次最多播0.05s短促射击音，noOverlap限速上限防高射速武器爆音
-        AssetManager.playSound(id === 'lightning' ? 'lightning' : 'shoot', 1, id === 'lightning' ? 8 : 0.05, true);
-        SceneManager.getLayer(Layers.Bullet).addChild(b);
+        AssetManager.playSound(
+            'shoot',
+            1,
+            id === 'lightning' ? 0.07 : 0.05,
+            true
+        );
+        // 闪电命中(锁定目标)：环绕电弧放 UI 层，避免被炮台遮住
+        // 闪电打空(无目标)：放回 Bullet 层，避免压在炮台上层
+        const layer =
+            id === 'lightning' && lightningTarget ? Layers.UI :
+            Layers.Bullet;
+        SceneManager.getLayer(layer).addChild(b);
         this.ctx.bullets.push(b);
         this.effects.spawnParticles(firePos.x + Math.cos(angle) * 40, firePos.y + Math.sin(angle) * 40, 2, 0xffffff, 2);
     }

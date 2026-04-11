@@ -88,7 +88,8 @@ export const WEAPONS: WeaponDef[] = [
         bulletKey: 'bullet_v2',
         unlockCost: 15000,
         goldCost: 0,
-        fireInterval: 24,
+        // 频率降低：避免环绕电弧与音效过于密集
+        fireInterval: 48,
         baseSpeed: 25,
         baseDamage: 0.8,
         maxLevel: 5,

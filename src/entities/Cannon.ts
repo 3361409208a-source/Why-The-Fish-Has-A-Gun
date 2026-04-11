@@ -16,20 +16,6 @@ export class Cannon extends PIXI.Sprite {
         this.switchTexture('cannon_base');
     }
 
-    private applyChromaKey(): void {
-        const shaderFrag = `
-            varying vec2 vTextureCoord;
-            uniform sampler2D uSampler;
-            void main(void) {
-                vec4 color = texture2D(uSampler, vTextureCoord);
-                float luma = dot(color.rgb, vec3(0.299, 0.587, 0.114));
-                if (luma < 0.12) discard;
-                gl_FragColor = color;
-            }
-        `;
-        this.filters = [new PIXI.Filter(undefined, shaderFrag)];
-    }
-
     public switchTexture(type: string): void {
         const skinMap: {[key: string]: string} = {
             'cannon_base': 'cannon_v3',
@@ -58,7 +44,8 @@ export class Cannon extends PIXI.Sprite {
         this.scale.set(this.baseScale);
         this.rotation = 0;
         this.anchor.set(0.5, 0.75);
-        this.applyChromaKey();
+        // 贴图已预抠图（透明 PNG），无需再做“智能抠图/去底色”滤镜处理
+        this.filters = null;
     }
 
     /** 触发发射动效，由 WeaponSystem.fire() 调用 */
@@ -70,7 +57,8 @@ export class Cannon extends PIXI.Sprite {
             'fish_tuna_mode':  8,
             'gatling':         4,
             'heavy':          28,
-            'lightning':      14,
+            // 和闪电环绕电弧持续时间更贴合
+            'lightning':      22,
             'railgun':        32,
             'void':           22,
             'acid':           14,
