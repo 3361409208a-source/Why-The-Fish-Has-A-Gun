@@ -9,6 +9,7 @@ export class Lightning extends PIXI.Graphics {
 
     constructor() {
         super();
+        this.blendMode = PIXI.BLEND_MODES.ADD; // 关键修复：加法混合模式，让多次渲染变为叠加的高亮等离子体，摆脱“涂鸦笔”质感
     }
 
     public spawn(x1: number, y1: number, x2: number, y2: number, isSub: boolean = false): void {
@@ -54,7 +55,8 @@ export class Lightning extends PIXI.Graphics {
         this.drawPath(points, 3 * w, 0x00ffff, 0.8); // 中层
         this.drawPath(points, 1.5 * w, 0xffffff, 1.0); // 内层
 
-        this.life = isSub ? 0.7 : 1.2;
+        // 关键修复：寿命极大削短至数帧内，形成视觉上的“爆闪”而非缓慢变暗的粗糙虚影
+        this.life = isSub ? 0.3 : 0.4;
         this.alpha = 1.0;
         this.isActive = true;
         this.visible = true;

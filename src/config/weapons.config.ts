@@ -88,10 +88,10 @@ export const WEAPONS: WeaponDef[] = [
         bulletKey: 'bullet_v2',
         unlockCost: 15000,
         goldCost: 0,
-        // 频率极大降低：避免环绕电弧瞎眼与卡顿，但单发威力获得了史诗级加强
-        fireInterval: 48,
+        // 手感优化：回归高频射速！这才是高压闪电枪该有的压制力体会
+        fireInterval: 14,
         baseSpeed: 25,
-        baseDamage: 8.0, // 从 0.8 增强至 8.0，补偿极慢的攻击频次
+        baseDamage: 2.2, // 根据超高射速回调，保持DPS但极大增加攻击频率
         maxLevel: 5,
         isHero: false,
         isChain: true,

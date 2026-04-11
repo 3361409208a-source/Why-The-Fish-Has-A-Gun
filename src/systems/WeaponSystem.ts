@@ -15,7 +15,7 @@ export class WeaponSystem {
 
     constructor(private ctx: GameContext, private effects: EffectSystem) {
         this.unsubs = [
-            EventBus.on<{ id: string }>(GameEvents.WEAPON_SELECT,  ({ id }) => this.handleShopSelect(id)),
+            EventBus.on<{ id: string }>(GameEvents.WEAPON_SELECT, ({ id }) => this.handleShopSelect(id)),
             EventBus.on<{ id: string }>(GameEvents.WEAPON_UPGRADE, ({ id }) => this.upgradeWeapon(id)),
         ];
     }
@@ -42,7 +42,7 @@ export class WeaponSystem {
             };
         });
         EventBus.emit(GameEvents.UI_SHOP_REFRESH, { weapons: weaponsData });
-        EventBus.emit(GameEvents.UI_HUD_UPDATE,    { crystals: this.ctx.crystals });
+        EventBus.emit(GameEvents.UI_HUD_UPDATE, { crystals: this.ctx.crystals });
     }
 
     handleShopSelect(id: string): void {
@@ -135,8 +135,8 @@ export class WeaponSystem {
                 const dot = dx * aimDx + dy * aimDy;
                 if (dot <= 0) continue; // 炮台背后跳过
                 const perp = Math.abs(dx * aimDy - dy * aimDx); // 鱼心到射线的垂直距离
-                // 放宽一点容差，避免“发射了但锁不到目标”
-                if (perp <= f.hitRadius * 1.25 && dot < minDot) { // 射线穿过鱼体，取最近的
+                // 手感大幅度优化：将容错宽度拉大并施加基础判定值，使其像粗壮等离子束般拥有优秀的锁定追踪能力
+                if (perp <= f.hitRadius * 1.5 + 80 && dot < minDot) { // 射线穿过鱼体附带大范围自动索敌
                     minDot = dot;
                     lightningTarget = f;
                 }
@@ -164,7 +164,7 @@ export class WeaponSystem {
         // 闪电打空(无目标)：放回 Bullet 层，避免压在炮台上层
         const layer =
             id === 'lightning' && lightningTarget ? Layers.UI :
-            Layers.Bullet;
+                Layers.Bullet;
         SceneManager.getLayer(layer).addChild(b);
         this.ctx.bullets.push(b);
         this.effects.spawnParticles(firePos.x + Math.cos(angle) * 40, firePos.y + Math.sin(angle) * 40, 2, 0xffffff, 2);
