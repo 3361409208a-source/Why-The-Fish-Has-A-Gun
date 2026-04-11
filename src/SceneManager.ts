@@ -31,7 +31,7 @@ export class SceneManager {
 
     public static setBackground(source: PIXI.Sprite | string, isTiled: boolean = false): void {
         const bgLayer = this.getLayer(Layers.Background);
-        
+
         if (typeof source === 'string') {
             // 关键修复：不要直接使用 PIXI.Texture.from，它在微信端会触发 Illegal constructor
             // 使用已经预加载好的 AssetManager.textures
@@ -47,13 +47,13 @@ export class SceneManager {
             bgLayer.removeChildren();
             bgLayer.addChild(this.bgSprite);
         }
-        
+
         this.isTiled = isTiled;
         this.bgSprite.visible = true; // 强制显示
         this.bgSprite.alpha = 1;
-        
+
         this.applyResize(); // 立即重新适配屏幕尺寸
-        
+
         // 增加动态海底扭曲滤镜
         if (!this.underwaterFilter) {
             this.underwaterFilter = new PIXI.Filter(undefined, `
@@ -69,16 +69,20 @@ export class SceneManager {
                     gl_FragColor = texture2D(uSampler, uv + vec2(waveX, waveY));
                 }
             `, { uTime: 0 });
+            // 修复模糊关键：Filter 的默认分辨率为 1，在 Retina 高分屏下会导致带有该滤镜的整个层直接降级变糊
+            this.underwaterFilter.resolution = this.app ? this.app.renderer.resolution : Math.max(window.devicePixelRatio || 1, 2);
             this.getLayer(Layers.Background).filters = [this.underwaterFilter];
+        } else if (this.app) {
+            this.underwaterFilter.resolution = this.app.renderer.resolution;
         }
 
-        this.applyResize(); 
+        this.applyResize();
     }
 
     public static init(app: PIXI.Application): void {
         this.app = app;
         this.app.stage.sortableChildren = true; // 开启阶段排序支持
-        
+
         // 1. 按层级顺序初始化容器
         this.createLayer(Layers.Background, 0); // 最底层
         this.createLayer(Layers.Game, 10);      // 鱼群
@@ -89,7 +93,7 @@ export class SceneManager {
 
         this.applyResize();
         window.addEventListener('resize', () => this.applyResize());
-        
+
         // 启动全局更新
         this.app.ticker.add((delta) => {
             // 背景滤镜更新
@@ -97,7 +101,7 @@ export class SceneManager {
                 this.filterTime += delta * 0.01;
                 this.underwaterFilter.uniforms.uTime = this.filterTime;
             }
-            
+
             // 环境气泡生成与更新
             this.updateAmbient(delta);
         });
@@ -151,7 +155,7 @@ export class SceneManager {
     public static applyResize(): void {
         const vw = window.innerWidth;
         const vh = window.innerHeight;
-        
+
         // 关键：必须动态调整渲染器分辨率，否则画面会缩在左上角
         this.app.renderer.resize(vw, vh);
 
@@ -167,7 +171,7 @@ export class SceneManager {
         }
 
         const scale = Math.min(targetVW / this.width, targetVH / this.height);
-        
+
         this.app.stage.scale.set(scale);
         this.app.stage.rotation = rotation;
 
@@ -189,7 +193,7 @@ export class SceneManager {
                 const ts = this.bgSprite as any;
                 ts.width = targetVW / scale;
                 ts.height = targetVH / scale;
-                
+
                 if (rotation === 0) {
                     ts.x = -this.app.stage.x / scale;
                     ts.y = -this.app.stage.y / scale;
@@ -201,16 +205,16 @@ export class SceneManager {
                 // 全图拉伸覆盖模式 (Cover Mode)
                 const texW = this.bgSprite.texture.width;
                 const texH = this.bgSprite.texture.height;
-                
+
                 // 计算铺满屏幕所需的比例
                 const bgScale = Math.max(
                     (targetVW / scale) / texW,
                     (targetVH / scale) / texH
                 );
-                
+
                 this.bgSprite.scale.set(bgScale);
                 this.bgSprite.anchor.set(0.5);
-                
+
                 // 将背景居中锁定
                 if (rotation === 0) {
                     this.bgSprite.x = (targetVW / scale) / 2 - this.app.stage.x / scale;
@@ -254,7 +258,7 @@ export class SceneManager {
             this.ambientSpawnTimer += delta;
             if (this.ambientSpawnTimer > 180) { // 大约每 3 秒尝试生成
                 this.ambientSpawnTimer = 0;
-                if (this.ambientFishes.length < 12) { 
+                if (this.ambientFishes.length < 12) {
                     this.spawnAmbientFish();
                 }
             }
@@ -267,7 +271,7 @@ export class SceneManager {
             const fish = this.ambientFishes[i];
             const speed = (fish as any)._speed || 1;
             const side = (fish as any)._side || 1;
-            
+
             fish.x += speed * side * delta;
             // 微微上下波浮动
             fish.y += Math.sin(Date.now() * 0.001 + i) * 0.2 * delta;
@@ -290,26 +294,26 @@ export class SceneManager {
         const types = ['fish_tuna', 'fish_jelly', 'fish_angler'];
         const type = types[Math.floor(Math.random() * types.length)];
         const tex = AssetManager.textures[type] || PIXI.Texture.WHITE;
-        
+
         const fish = new PIXI.Sprite(tex);
         const side = Math.random() > 0.5 ? 1 : -1;
-        
+
         fish.x = side > 0 ? -150 : this.width + 150;
         fish.y = 100 + Math.random() * (this.height - 200);
         fish.alpha = 0.3 + Math.random() * 0.3; // 较淡，作为背景
-        
+
         const scale = 0.2 + Math.random() * 0.2;
         fish.scale.set(side > 0 ? -scale : scale, scale); // 翻转朝向
-        
+
         (fish as any)._speed = 0.5 + Math.random() * 1.2;
         (fish as any)._side = side;
-        
+
         bgLayer.addChild(fish);
         // 确保鱼在背景图层上方，但在 UI 之下
         if (this.bgSprite) {
             bgLayer.setChildIndex(fish, bgLayer.children.length - 1);
         }
-        
+
         this.ambientFishes.push(fish);
     }
 
