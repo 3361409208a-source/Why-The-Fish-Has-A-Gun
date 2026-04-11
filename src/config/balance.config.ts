@@ -58,7 +58,7 @@ export const AOE = {
 export const CHAIN = {
     baseTargets: 5,        // 基础跳跃次数（+level）
     chainRange: 300,       // 跳跃最远距离
-    damageFalloff: 0.5,    // 每次跳跃伤害比例
+    damageFalloff: 0.85,   // 每次跳跃伤害乘数
 };
 
 /** 经济掉落 */

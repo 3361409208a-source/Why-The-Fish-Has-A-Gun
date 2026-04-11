@@ -11,16 +11,19 @@ export class Lightning extends PIXI.Graphics {
         super();
     }
 
-    public spawn(x1: number, y1: number, x2: number, y2: number): void {
+    public spawn(x1: number, y1: number, x2: number, y2: number, isSub: boolean = false): void {
         this.clear();
-        
+
+        let w = isSub ? 0.35 : 1.0;
+        let j = isSub ? 0.6 : 1.0;
+
         // 绘制三层复合闪电：外层青色晕染 + 中层电道 + 核心白光
         // 这样可以模拟出高压电荷的“过曝”视觉效果，看起来更亮、更有攻击性
-        this.drawLightningPath(x1, y1, x2, y2, 40, 6, 0x00ffff, 0.3); // 外层
-        this.drawLightningPath(x1, y1, x2, y2, 20, 3, 0x00ffff, 0.8); // 中层
-        this.drawLightningPath(x1, y1, x2, y2, 10, 1.5, 0xffffff, 1.0); // 内层
+        this.drawLightningPath(x1, y1, x2, y2, 40 * j, 6 * w, 0x00ffff, 0.3); // 外层
+        this.drawLightningPath(x1, y1, x2, y2, 20 * j, 3 * w, 0x00ffff, 0.8); // 中层
+        this.drawLightningPath(x1, y1, x2, y2, 10 * j, 1.5 * w, 0xffffff, 1.0); // 内层
 
-        this.life = 1.2;
+        this.life = isSub ? 0.7 : 1.2;
         this.alpha = 1.0;
         this.isActive = true;
         this.visible = true;

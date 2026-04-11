@@ -6,7 +6,7 @@ import { Lightning } from '../entities/Lightning';
 import type { GameContext } from './GameContext';
 
 export class EffectSystem {
-    constructor(private ctx: GameContext) {}
+    constructor(private ctx: GameContext) { }
 
     spawnParticles(x: number, y: number, count: number, color: number, intensity: number): void {
         for (let i = 0; i < count; i++) {
@@ -28,10 +28,10 @@ export class EffectSystem {
         }
     }
 
-    spawnLightning(x1: number, y1: number, x2: number, y2: number): void {
+    spawnLightning(x1: number, y1: number, x2: number, y2: number, isSub: boolean = false): void {
         const l = this.ctx.pool.get('lightning', () => new Lightning());
         if (l) {
-            l.spawn(x1, y1, x2, y2);
+            l.spawn(x1, y1, x2, y2, isSub);
             SceneManager.getLayer(Layers.FX).addChild(l);
             this.ctx.lightnings.push(l);
         }

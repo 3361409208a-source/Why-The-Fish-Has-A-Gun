@@ -23,7 +23,7 @@ export class CombatSystem {
         private spawner: SpawnSystem,
         private status: StatusSystem,
         private attacks: AttackSystem,
-    ) {}
+    ) { }
 
     checkCollisions(delta: number): void {
         for (const b of this.ctx.bullets) {
@@ -44,7 +44,7 @@ export class CombatSystem {
                 const hitDmg = b.damage * dmgMult;
                 this.applyDamage(target, hitDmg);
                 this.status.applyElectrocute(target, hitDmg);
-                this.triggerChainLightning(target, CHAIN.baseTargets + lvl, b.damage * CHAIN.damageFalloff * dmgMult);
+                this.triggerChainLightning(target, CHAIN.baseTargets + lvl, hitDmg);
                 continue;
             }
 
@@ -97,26 +97,28 @@ export class CombatSystem {
         }
     }
 
-    private triggerChainLightning(startFish: Fish, maxCount: number, dmg: number): void {
+    private triggerChainLightning(startFish: Fish, maxCount: number, baseDmg: number): void {
         let current = startFish;
         let count = 0;
         const hitSet = new Set<Fish>([startFish]);
+        let currentDmg = baseDmg * CHAIN.damageFalloff;
 
         while (count < maxCount) {
             let next: Fish | null = null;
-            let minDist = 300;
+            let minDist = CHAIN.chainRange;
             for (const f of this.ctx.fishes) {
                 if (!f.isActive || hitSet.has(f)) continue;
                 const d = Math.sqrt(Math.pow(f.x - current.x, 2) + Math.pow(f.y - current.y, 2));
                 if (d < minDist) { minDist = d; next = f; }
             }
             if (next) {
-                this.effects.spawnLightning(current.x, current.y, next.x, next.y);
-                this.applyDamage(next, dmg);
-                this.status.applyElectrocute(next, dmg);
+                this.effects.spawnLightning(current.x, current.y, next.x, next.y, true);
+                this.applyDamage(next, currentDmg);
+                this.status.applyElectrocute(next, currentDmg);
                 hitSet.add(next);
                 current = next;
                 count++;
+                currentDmg *= CHAIN.damageFalloff;
             } else break;
         }
     }
