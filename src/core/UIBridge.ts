@@ -5,6 +5,7 @@ import {
     ComboPayload,
     FloatingTextPayload,
     ShopRefreshPayload,
+    StageScorePayload,
 } from './GameEvents';
 import { UIManager } from '../UIManager';
 
@@ -36,6 +37,10 @@ export class UIBridge {
                     (id) => EventBus.emit(GameEvents.WEAPON_SELECT, { id }),
                     (id) => EventBus.emit(GameEvents.WEAPON_UPGRADE, { id }),
                 );
+            }),
+
+            EventBus.on<StageScorePayload>(GameEvents.UI_STAGE_SCORE_UPDATE, ({ currentScore, requiredScore, levelId }) => {
+                UIManager.updateStageScore(currentScore, requiredScore, levelId);
             }),
         ];
     }

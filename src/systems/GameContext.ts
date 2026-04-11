@@ -77,12 +77,14 @@ export interface GameContext {
     frozenTime: number;
     // 关卡模式（0 = 随机模式，1-10 = 关卡模式）
     stageLevel: number;
-    stageBossQueue: string[];      // 待生成的 bossKey 队列（按顺序）
-    stageBossNames: string[];      // 对应名称（与队列同步）
-    stageBossSpawnTimer: number;   // 下一个 Boss 的生成倒计时（帧）
-    stageBossSpawnInterval: number;// Boss 生成间隔（帧）
-    stageBossesTotal: number;      // 本关总 Boss 数
-    stageBossesKilled: number;     // 已击杀 Boss 数
+    /** 本局累积分数（击杀+拾取都计入） */
+    stageScore: number;
+    stageBossSpawnTimer: number;   // Boss 被击杀后重新生成的冷却倒计时（帧）
+    stageBossSpawnInterval: number;// Boss 重新生成间隔（帧）
+    /** 当前Boss是否存活 */
+    stageBossAlive: boolean;
+    /** 是否已显示解锁提示（防止重复显示） */
+    stageUnlockShown: boolean;
     // 全局狂热（Berserk）效果
     berserkTimer: number;          // 每 10s 一个循环的计时器
     isBerserk: boolean;            // 是否处于狂热状态

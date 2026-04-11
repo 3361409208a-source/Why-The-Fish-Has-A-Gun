@@ -5,7 +5,7 @@ import { Cannon } from './entities/Cannon';
 import { UIManager } from './UIManager';
 import { SaveManager } from './SaveManager';
 import { WEAPONS } from './config/weapons.config';
-import { LEVELS } from './config/levels.config';
+import { LEVELS, getLayerLevels, getLayerAreaLevels, LAYER_CONFIGS, LEVELS_PER_AREA } from './config/levels.config';
 import { EventBus } from './core/EventBus';
 import { GameEvents } from './core/GameEvents';
 import { UIBridge } from './core/UIBridge';
@@ -33,8 +33,10 @@ export class GameController {
     private weapons: WeaponSystem;
     private input: InputSystem;
     private tickerFunc: (delta: number) => void;
+    private onRestartLevel?: (config: any) => void;
 
-    constructor(app: PIXI.Application, config: any, dialogueLines?: any[], onBack?: () => void, stageLevel: number = 0) {
+    constructor(app: PIXI.Application, config: any, dialogueLines?: any[], onBack?: () => void, stageLevel: number = 0, onRestartLevel?: (config: any) => void) {
+        this.onRestartLevel = onRestartLevel;
         const pool = PoolManager.getInstance();
         const cannon = new Cannon();
         cannon.x = SceneManager.width / 2;
@@ -66,25 +68,32 @@ export class GameController {
             manualAimY: 0,
             frozenTime: 0,
             stageLevel,
-            stageBossQueue: [],
-            stageBossNames: [],
+            stageScore: 0,
             stageBossSpawnTimer: 0,
             stageBossSpawnInterval: 0,
-            stageBossesTotal: 0,
-            stageBossesKilled: 0,
+            stageBossAlive: false,
+            stageUnlockShown: false,
             berserkTimer: 0,
             isBerserk: false,
             berserkCharge: 0,
         };
 
+        // 获取当前层和区域配置（支持无限区域系统）
+        const currentLayer = config.layer || SaveManager.state.currentLayer || 1;
+        const currentArea = config.area || SaveManager.state.currentArea[String(currentLayer)] || 1;
+        const areaLevels = getLayerAreaLevels(currentLayer, currentArea);
+
         if (stageLevel > 0) {
-            const lvl = LEVELS.find(l => l.id === stageLevel);
+            // 计算区域内的本地关卡ID（1-10）
+            const levelInArea = ((stageLevel - 1) % LEVELS_PER_AREA) + 1;
+            const lvl = areaLevels.find(l => l.id === levelInArea);
             if (lvl) {
-                this.ctx.stageBossQueue = lvl.bosses.map(b => b.bossKey);
-                this.ctx.stageBossNames = lvl.bosses.map(b => b.name);
-                this.ctx.stageBossesTotal = lvl.bosses.length;
                 this.ctx.stageBossSpawnInterval = lvl.bossSpawnInterval;
-                this.ctx.stageBossSpawnTimer = lvl.bossSpawnInterval;
+                this.ctx.stageBossSpawnTimer = 60; // 首个Boss 1秒后生成
+                // 应用层+区域难度倍率
+                this.ctx.hpMultiplier = lvl.hpMult;
+                this.ctx.spawnRate = lvl.spawnRate;
+                this.ctx.rewardMultiplier = lvl.reward;
             }
         }
 
@@ -110,7 +119,18 @@ export class GameController {
         this.initBackButton(app, onBack);
         this.input.init();
         this.weapons.updateShopUI();
-        if (stageLevel > 0) this.initStageEvents(app, stageLevel, onBack);
+        if (stageLevel > 0) {
+            this.initStageEvents(app, stageLevel, onBack, currentLayer, currentArea);
+
+            // 初始化关卡分数显示（使用区域关卡数据）
+            const levelInArea = ((stageLevel - 1) % LEVELS_PER_AREA) + 1;
+            const nextLevelInArea = levelInArea + 1;
+            const nextLvl = nextLevelInArea <= LEVELS_PER_AREA
+                ? areaLevels.find((l: typeof areaLevels[0]) => l.id === nextLevelInArea)
+                : null;
+            const requiredScore = nextLvl ? nextLvl.unlockScore : 0;
+            UIManager.updateStageScore(0, requiredScore, stageLevel);
+        }
 
         this.tickerFunc = (delta: number) => {
             if (this.ctx.isPaused) return;
@@ -132,43 +152,190 @@ export class GameController {
         }
     }
 
-    private initStageEvents(app: PIXI.Application, stageLevel: number, onBack?: () => void): void {
-        const lvlDef = LEVELS.find(l => l.id === stageLevel);
+    private initStageEvents(app: PIXI.Application, stageLevel: number, onBack: (() => void) | undefined, currentLayer: number, currentArea: number): void {
+        const areaLevels = getLayerAreaLevels(currentLayer, currentArea);
+        const levelInArea = ((stageLevel - 1) % LEVELS_PER_AREA) + 1;
+        const lvlDef = areaLevels.find((l: typeof areaLevels[0]) => l.id === levelInArea);
 
         // Boss登场对话
-        const bossSpawnUnsub = EventBus.on(GameEvents.STAGE_BOSS_SPAWNED, (payload: any) => {
-            const bossEntry = lvlDef?.bosses.find(b => b.bossKey === payload.bossKey);
-            if (bossEntry?.spawnDialogue && bossEntry.spawnDialogue.length > 0) {
+        const bossSpawnUnsub = EventBus.on(GameEvents.STAGE_BOSS_SPAWNED, () => {
+            if (lvlDef && lvlDef.spawnDialogue && lvlDef.spawnDialogue.length > 0) {
                 this.ctx.isPaused = true;
-                UIManager.showDialogue(bossEntry.spawnDialogue).then(() => {
+                UIManager.showDialogue(lvlDef.spawnDialogue).then(() => {
                     this.ctx.isPaused = false;
                 });
             }
         });
 
-        // 通关处理
-        const stageClearUnsub = EventBus.on(GameEvents.STAGE_CLEAR, (payload: any) => {
-            bossSpawnUnsub();
-            stageClearUnsub();
+        // 分数达标 → 显示解锁提示
+        const unlockReachedUnsub = EventBus.on(GameEvents.STAGE_UNLOCK_REACHED, (payload: { currentScore: number; requiredScore: number; nextLevelName: string }) => {
             this.ctx.isPaused = true;
-            import('./SaveManager').then(({ SaveManager }) => {
-                if (!SaveManager.state.clearedStages.includes(payload.levelId)) {
-                    SaveManager.state.clearedStages.push(payload.levelId);
-                    SaveManager.save();
-                }
-            });
-            UIManager.showConfirm(
-                `异常清除完毕！\n本局收益: ${UIManager.formatNumber(Math.floor(this.ctx.crystals))} 晶体`,
-                `✓ 第 ${payload.levelId} 关 通关！`
-            ).then(ok => {
-                this.destroy();
-                if (onBack) onBack();
-                else {
-                    SceneManager.getLayer(Layers.UI).removeChildren();
-                    UIManager.init(app, (cfg) => new GameController(app, cfg));
-                }
+            import('./UIManager').then(({ UIManager }) => {
+                UIManager.showStageUnlockPrompt(payload.currentScore, payload.requiredScore, payload.nextLevelName).then((choice) => {
+                    this.ctx.isPaused = false;
+                    if (choice === 'next') {
+                        // 下一关：直接开始下一关
+                        const nextLevelInArea = levelInArea + 1;
+                        if (nextLevelInArea <= LEVELS_PER_AREA) {
+                            const nextGlobalLevel = (currentArea - 1) * LEVELS_PER_AREA + nextLevelInArea;
+                            // 获取下一关配置
+                            const nextLvl = areaLevels.find((l: typeof areaLevels[0]) => l.id === nextLevelInArea);
+                            const restartCallback = this.onRestartLevel;
+                            if (nextLvl && restartCallback) {
+                                // 保存当前分数到存档（同步）
+                                import('./SaveManager').then(({ SaveManager }) => {
+                                    const layerKey = String(currentLayer);
+                                    const levelKey = String(stageLevel);
+                                    if (!SaveManager.state.layerStageScores[layerKey]) {
+                                        SaveManager.state.layerStageScores[layerKey] = {};
+                                    }
+                                    const prev = SaveManager.state.layerStageScores[layerKey][levelKey] || 0;
+                                    if (this.ctx.stageScore > prev) {
+                                        SaveManager.state.layerStageScores[layerKey][levelKey] = this.ctx.stageScore;
+                                    }
+                                    // 解锁下一关
+                                    if (!SaveManager.state.unlockedLayerStages[layerKey]) {
+                                        SaveManager.state.unlockedLayerStages[layerKey] = [];
+                                    }
+                                    if (!SaveManager.state.unlockedLayerStages[layerKey].includes(nextGlobalLevel)) {
+                                        SaveManager.state.unlockedLayerStages[layerKey].push(nextGlobalLevel);
+                                    }
+                                    SaveManager.save();
+                                    // 保存完成后销毁并开始下一关
+                                    this.destroy();
+                                    restartCallback({
+                                        id: nextLvl.bgKey,
+                                        bgKey: nextLvl.bgKey,
+                                        hpMult: nextLvl.hpMult,
+                                        spawnRate: nextLvl.spawnRate,
+                                        reward: nextLvl.reward,
+                                        stageLevel: nextGlobalLevel,
+                                        layer: currentLayer,
+                                        area: currentArea,
+                                    });
+                                });
+                            }
+                        }
+                    } else if (choice === 'exit') {
+                        // 退出：返回大厅
+                        this.destroy();
+                        if (onBack) {
+                            onBack();
+                        }
+                    }
+                    // 继续：什么都不做，直接继续当前关卡
+                });
             });
         });
+
+        // Boss被击杀 → 记录分数 → 冷却后重新生成Boss
+        const bossKilledUnsub = EventBus.on(GameEvents.STAGE_BOSS_KILLED, () => {
+            this.ctx.stageBossAlive = false;
+            this.ctx.stageBossSpawnTimer = this.ctx.stageBossSpawnInterval;
+
+            // 更新本关最高分到存档（分层+分区存储）
+            import('./SaveManager').then(({ SaveManager }) => {
+                const layerKey = String(currentLayer);
+                const levelKey = String(stageLevel);
+
+                // 初始化层数据（如果不存在）
+                if (!SaveManager.state.layerStageScores[layerKey]) {
+                    SaveManager.state.layerStageScores[layerKey] = {};
+                }
+                if (!SaveManager.state.unlockedLayerStages[layerKey]) {
+                    SaveManager.state.unlockedLayerStages[layerKey] = [];
+                }
+                if (!SaveManager.state.unlockedLayerAreas[layerKey]) {
+                    SaveManager.state.unlockedLayerAreas[layerKey] = [1];
+                }
+
+                const prev = SaveManager.state.layerStageScores[layerKey][levelKey] || 0;
+                if (this.ctx.stageScore > prev) {
+                    SaveManager.state.layerStageScores[layerKey][levelKey] = this.ctx.stageScore;
+                }
+
+                // 检查是否解锁下一关（区域内）
+                const nextLevelInArea = levelInArea + 1;
+                if (nextLevelInArea <= LEVELS_PER_AREA) {
+                    const nextLvl = areaLevels.find((l: typeof areaLevels[0]) => l.id === nextLevelInArea);
+                    if (nextLvl && this.ctx.stageScore >= nextLvl.unlockScore) {
+                        const nextGlobalLevel = (currentArea - 1) * LEVELS_PER_AREA + nextLevelInArea;
+                        if (!SaveManager.state.unlockedLayerStages[layerKey].includes(nextGlobalLevel)) {
+                            SaveManager.state.unlockedLayerStages[layerKey].push(nextGlobalLevel);
+                        }
+                    }
+                }
+
+                // 检查是否解锁下一区域（第10关通关）
+                if (levelInArea === LEVELS_PER_AREA) {
+                    const nextArea = currentArea + 1;
+                    if (!SaveManager.state.unlockedLayerAreas[layerKey].includes(nextArea)) {
+                        SaveManager.state.unlockedLayerAreas[layerKey].push(nextArea);
+                        // 解锁下一区域的第1关
+                        const nextAreaFirstLevel = nextArea * LEVELS_PER_AREA + 1;
+                        if (!SaveManager.state.unlockedLayerStages[layerKey].includes(nextAreaFirstLevel)) {
+                            SaveManager.state.unlockedLayerStages[layerKey].push(nextAreaFirstLevel);
+                        }
+                    }
+                }
+
+                // 检查是否解锁下一层（第10关通关且平均分解锁）
+                if (levelInArea === LEVELS_PER_AREA && currentArea >= 3) {
+                    import('./config/levels.config').then(({ isLayerUnlocked }) => {
+                        const nextLayer = currentLayer + 1;
+                        if (isLayerUnlocked(nextLayer, SaveManager.state.layerStageScores)) {
+                            if (!SaveManager.state.unlockedLayers.includes(nextLayer)) {
+                                SaveManager.state.unlockedLayers.push(nextLayer);
+                            }
+                        }
+                    });
+                }
+
+                SaveManager.save();
+            });
+        });
+
+        // 撤退时也保存分数
+        const cleanup = () => {
+            bossSpawnUnsub();
+            unlockReachedUnsub();
+            bossKilledUnsub();
+            import('./SaveManager').then(({ SaveManager }) => {
+                const layerKey = String(currentLayer);
+                const levelKey = String(stageLevel);
+
+                if (!SaveManager.state.layerStageScores[layerKey]) {
+                    SaveManager.state.layerStageScores[layerKey] = {};
+                }
+
+                const prev = SaveManager.state.layerStageScores[layerKey][levelKey] || 0;
+                if (this.ctx.stageScore > prev) {
+                    SaveManager.state.layerStageScores[layerKey][levelKey] = this.ctx.stageScore;
+                }
+
+                const nextLevelInArea = levelInArea + 1;
+                if (nextLevelInArea <= LEVELS_PER_AREA) {
+                    const nextLvl = areaLevels.find((l: typeof areaLevels[0]) => l.id === nextLevelInArea);
+                    if (nextLvl && this.ctx.stageScore >= nextLvl.unlockScore) {
+                        const nextGlobalLevel = (currentArea - 1) * LEVELS_PER_AREA + nextLevelInArea;
+                        if (!SaveManager.state.unlockedLayerStages[layerKey]?.includes(nextGlobalLevel)) {
+                            if (!SaveManager.state.unlockedLayerStages[layerKey]) {
+                                SaveManager.state.unlockedLayerStages[layerKey] = [];
+                            }
+                            SaveManager.state.unlockedLayerStages[layerKey].push(nextGlobalLevel);
+                        }
+                    }
+                }
+                SaveManager.save();
+            });
+        };
+
+        // 将 cleanup 绑定到 destroy
+        const origDestroy = this.destroy.bind(this);
+        this.destroy = () => {
+            cleanup();
+            origDestroy();
+        };
     }
 
     private initBackButton(app: PIXI.Application, onBack?: () => void): void {

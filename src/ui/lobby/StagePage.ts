@@ -1,27 +1,57 @@
 import * as PIXI from 'pixi.js';
 import { SceneManager } from '../../SceneManager';
 import { SaveManager } from '../../SaveManager';
-import { LEVELS } from '../../config/levels.config';
+import { LEVELS, getLayerLevels, getLayerAreaLevels, LAYER_CONFIGS, getLayerName, isLayerUnlocked, getAreaName, LEVELS_PER_AREA } from '../../config/levels.config';
+import { AssetManager } from '../../AssetManager';
+import { FloatingText } from '../overlays/FloatingText';
 
-/** 关卡选择页：10关累积Boss挑战 */
+/** 关卡选择页：每关一个Boss，分数解锁 */
 export class StagePage {
     public static draw(
         container: PIXI.Container,
         onLevelSelected: (levelId: number, config: any) => void
     ): void {
         const W = SceneManager.width;
-        const cleared = SaveManager.state.clearedStages;
+        const currentLayer = SaveManager.state.currentLayer || 1;
+        const layerKey = String(currentLayer);
+        const currentArea = SaveManager.state.currentArea[layerKey] || 1;
+        const areaLevels = getLayerAreaLevels(currentLayer, currentArea);
 
-        const pageTitle = new PIXI.Text('关卡挑战模式', {
+        // 返回按钮
+        const backBtn = new PIXI.Container();
+        const backBg = new PIXI.Graphics()
+            .beginFill(0x003344, 1)
+            .lineStyle(2, 0x0088ff, 1)
+            .drawRoundedRect(0, 0, 120, 40, 8)
+            .endFill();
+        const backTxt = new PIXI.Text('← 返回大厅', {
+            fontSize: 16, fill: 0xffffff, fontWeight: 'bold',
+        });
+        backTxt.anchor.set(0.5); backTxt.x = 60; backTxt.y = 22;
+        backBtn.addChild(backBg, backTxt);
+        backBtn.x = 40; backBtn.y = 30;
+        backBtn.eventMode = 'static'; backBtn.cursor = 'pointer';
+        backBtn.on('pointerover', () => { backBg.tint = 0x006688; });
+        backBtn.on('pointerout', () => { backBg.tint = 0xffffff; });
+        backBtn.on('pointerdown', () => {
+            container.removeChildren();
+            // 返回大厅逻辑由UIManager处理
+            import('../../UIManager').then(({ UIManager }) => {
+                UIManager.showMapSelection(() => {});
+            });
+        });
+        container.addChild(backBtn);
+
+        const pageTitle = new PIXI.Text(`${getLayerName(currentLayer)} · ${getAreaName(currentArea)}`, {
             fontSize: 32, fill: 0xff6600, fontWeight: 'bold', letterSpacing: 3,
         });
-        pageTitle.anchor.set(0.5); pageTitle.x = W / 2; pageTitle.y = 140;
+        pageTitle.anchor.set(0.5); pageTitle.x = W / 2; pageTitle.y = 100;
         container.addChild(pageTitle);
 
-        const sub = new PIXI.Text('每关专属Boss永远最大 · 前关Boss全部回归 · 击杀所有Boss即为通关', {
+        const sub = new PIXI.Text(`难度×${(1 + (currentArea - 1) * 0.5).toFixed(1)} · 每关对应一个Boss · 击杀Boss累积分数`, {
             fontSize: 15, fill: 0x888888,
         });
-        sub.anchor.set(0.5); sub.x = W / 2; sub.y = 180;
+        sub.anchor.set(0.5); sub.x = W / 2; sub.y = 140;
         container.addChild(sub);
 
         // 5列2行网格
@@ -32,23 +62,39 @@ export class StagePage {
         const gapY = 20;
         const gridW = cols * cardW + (cols - 1) * gapX;
         const startX = (W - gridW) / 2;
-        const startY = 210;
+        const startY = 180;
 
-        LEVELS.forEach((lvl, i) => {
+        const unlockedStages = SaveManager.state.unlockedLayerStages[layerKey] || [1];
+        const stageScores = SaveManager.state.layerStageScores[layerKey] || {};
+
+        console.log('[StagePage] areaLevels count:', areaLevels.length, 'unlockedStages:', unlockedStages);
+
+        areaLevels.forEach((lvl, i) => {
             const col = i % cols;
             const row = Math.floor(i / cols);
             const x = startX + col * (cardW + gapX);
             const y = startY + row * (cardH + gapY);
 
-            const isCleared = cleared.includes(lvl.id);
-            const prevCleared = lvl.id === 1 || cleared.includes(lvl.id - 1);
-            const isLocked = !prevCleared;
+            // lvl.id 已从 getLayerAreaLevels 返回为全局唯一ID，直接使用
+            const globalLevelId = lvl.id;
+            // 第一关（unlockScore为0）或已在解锁列表中的关卡视为已解锁
+            const isUnlocked = lvl.unlockScore === 0 || unlockedStages.includes(globalLevelId);
+            const bestScore = stageScores[String(globalLevelId)] || 0;
 
-            const card = this.createLevelCard(lvl, isCleared, isLocked, () => {
-                onLevelSelected(lvl.id, {
+            console.log('[StagePage] Level:', lvl.id, 'name:', lvl.name, 'isUnlocked:', isUnlocked, 'unlockScore:', lvl.unlockScore);
+
+            const card = this.createLevelCard(lvl, isUnlocked, bestScore, () => {
+                console.log('[StagePage] Level card clicked:', globalLevelId, 'isUnlocked:', isUnlocked);
+                if (!isUnlocked) {
+                    FloatingText.show(W / 2, 200, '该关卡尚未解锁！', 0xff0000);
+                    return;
+                }
+                onLevelSelected(globalLevelId, {
                     hpMult: lvl.hpMult,
                     spawnRate: lvl.spawnRate,
                     reward: lvl.reward,
+                    layer: currentLayer,
+                    area: currentArea,
                 });
             });
             card.x = x; card.y = y;
@@ -58,125 +104,117 @@ export class StagePage {
 
     private static createLevelCard(
         lvl: (typeof LEVELS)[number],
-        isCleared: boolean,
-        isLocked: boolean,
+        isUnlocked: boolean,
+        bestScore: number,
         onEnter: () => void
     ): PIXI.Container {
         const card = new PIXI.Container();
-        const borderColor = isLocked ? 0x333333 : (isCleared ? 0x00ff88 : lvl.borderColor);
-        const alpha = isLocked ? 0.45 : 1.0;
+        const borderColor = isUnlocked ? lvl.borderColor : 0x333333;
+        const alpha = isUnlocked ? 1.0 : 0.45;
 
+        // 背景 - 提高不透明度以改善文字可读性
         const bg = new PIXI.Graphics()
-            .beginFill(0x0a0f1a, 0.92)
+            .beginFill(0x0a0f1a, isUnlocked ? 0.98 : 0.85)
             .lineStyle(3, borderColor, 1)
             .drawRoundedRect(0, 0, 220, 320, 12)
             .endFill();
-        bg.alpha = alpha;
         card.addChild(bg);
+
+        // Boss头像
+        const avatarTex = AssetManager.textures[lvl.bossAvatar];
+        if (avatarTex) {
+            const avatar = new PIXI.Sprite(avatarTex);
+            avatar.width = 200; avatar.height = 100; avatar.x = 10; avatar.y = 10;
+            const maskGfx = new PIXI.Graphics().beginFill(0xffffff).drawRoundedRect(10, 10, 200, 100, 8).endFill();
+            avatar.mask = maskGfx;
+            card.addChild(avatar, maskGfx);
+        }
 
         // Level number badge
         const numBadge = new PIXI.Graphics()
-            .beginFill(borderColor, isLocked ? 0.2 : 0.3)
+            .beginFill(borderColor, isUnlocked ? 0.3 : 0.15)
             .drawRoundedRect(8, 8, 48, 48, 8)
             .endFill();
         card.addChild(numBadge);
 
+        // 关卡编号 - 增大字体，添加描边效果
         const numTxt = new PIXI.Text(`${lvl.id}`, {
-            fontSize: 28, fill: isLocked ? 0x555555 : 0xffffff, fontWeight: 'bold',
+            fontSize: 32, fill: isUnlocked ? 0xffffff : 0x888888, fontWeight: 'bold',
+            stroke: isUnlocked ? 0x000000 : 0x333333, strokeThickness: 3,
         });
         numTxt.anchor.set(0.5); numTxt.x = 32; numTxt.y = 32;
         card.addChild(numTxt);
 
-        // 通关/锁定状态标记
-        if (isCleared) {
-            const clearedBadge = new PIXI.Text('✓ 已通关', { fontSize: 13, fill: 0x00ff88, fontWeight: 'bold' });
-            clearedBadge.anchor.set(1, 0); clearedBadge.x = 214; clearedBadge.y = 12;
-            card.addChild(clearedBadge);
-        } else if (isLocked) {
-            const lockedBadge = new PIXI.Text('🔒 锁定', { fontSize: 13, fill: 0x666666 });
-            lockedBadge.anchor.set(1, 0); lockedBadge.x = 214; lockedBadge.y = 12;
+        // 锁定/分数状态 - 提高对比度
+        if (!isUnlocked) {
+            const lockedBadge = new PIXI.Text('🔒 锁定', { fontSize: 14, fill: 0xff4444, fontWeight: 'bold', stroke: 0x000000, strokeThickness: 2 });
+            lockedBadge.anchor.set(1, 0); lockedBadge.x = 212; lockedBadge.y = 12;
             card.addChild(lockedBadge);
+        } else if (bestScore > 0) {
+            const scoreBadge = new PIXI.Text(`✓ ${FloatingText.formatNumber(bestScore)}分`, { fontSize: 14, fill: 0x00ff88, fontWeight: 'bold', stroke: 0x003300, strokeThickness: 2 });
+            scoreBadge.anchor.set(1, 0); scoreBadge.x = 212; scoreBadge.y = 12;
+            card.addChild(scoreBadge);
         }
 
-        // 关卡名
-        const nameStyle: Partial<PIXI.ITextStyle> = {
-            fontSize: 16, fill: isLocked ? 0x555555 : 0xffffff, fontWeight: 'bold',
-            wordWrap: true, wordWrapWidth: 130,
-        };
-        const nameTxt = new PIXI.Text(lvl.name.replace(/^第.+关：/, ''), nameStyle);
-        nameTxt.x = 64; nameTxt.y = 14;
+        // Boss名称 - 增大字体，添加描边
+        const nameTxt = new PIXI.Text(lvl.bossName, {
+            fontSize: 18, fill: isUnlocked ? 0xffdd00 : 0x999999, fontWeight: 'bold',
+            wordWrap: true, wordWrapWidth: 200,
+            stroke: 0x000000, strokeThickness: 3,
+        });
+        nameTxt.x = 10; nameTxt.y = 118;
         card.addChild(nameTxt);
 
+        // 副标题 - 提高对比度
         const subTxt = new PIXI.Text(lvl.subtitle, {
-            fontSize: 11, fill: isLocked ? 0x444444 : 0x7a8a9a,
+            fontSize: 12, fill: isUnlocked ? 0xaaccdd : 0x666666,
             wordWrap: true, wordWrapWidth: 200,
+            stroke: 0x000000, strokeThickness: 2,
         });
-        subTxt.x = 10; subTxt.y = 66;
+        subTxt.x = 10; subTxt.y = 144;
         card.addChild(subTxt);
 
         // 分割线
         const line = new PIXI.Graphics()
-            .lineStyle(1, isLocked ? 0x222222 : 0x1a2a3a)
-            .moveTo(10, 90).lineTo(210, 90);
+            .lineStyle(1, isUnlocked ? 0x1a2a3a : 0x222222)
+            .moveTo(10, 168).lineTo(210, 168);
         card.addChild(line);
 
-        // Boss列表
-        const exclusive = lvl.bosses.find(b => b.isExclusive);
-        const others = lvl.bosses.filter(b => !b.isExclusive);
-
-        const bossLabel = new PIXI.Text('专属BOSS:', {
-            fontSize: 12, fill: isLocked ? 0x444444 : 0xff8800, fontWeight: 'bold',
-        });
-        bossLabel.x = 10; bossLabel.y = 98;
-        card.addChild(bossLabel);
-
-        if (exclusive) {
-            const exName = new PIXI.Text(exclusive.name.replace('（回归）', ''), {
-                fontSize: 13, fill: isLocked ? 0x444444 : 0xffdd00, fontWeight: 'bold',
-            });
-            exName.x = 10; exName.y = 116;
-            card.addChild(exName);
-        }
-
-        if (others.length > 0) {
-            const retLabel = new PIXI.Text('回归:', {
-                fontSize: 11, fill: isLocked ? 0x333333 : 0x5a8aaa,
-            });
-            retLabel.x = 10; retLabel.y = 140;
-            card.addChild(retLabel);
-
-            const retNames = others.map(b => b.name.replace('（回归）', '')).join(' / ');
-            const retTxt = new PIXI.Text(retNames, {
-                fontSize: 10, fill: isLocked ? 0x333333 : 0x667788,
-                wordWrap: true, wordWrapWidth: 200,
-            });
-            retTxt.x = 10; retTxt.y = 155;
-            card.addChild(retTxt);
-        }
-
-        // 难度数值
-        const line2 = new PIXI.Graphics()
-            .lineStyle(1, isLocked ? 0x222222 : 0x1a2a3a)
-            .moveTo(10, 210).lineTo(210, 210);
-        card.addChild(line2);
-
+        // 难度数值 - 提高对比度
         const diffTxt = new PIXI.Text(
-            `HP ×${lvl.hpMult}  奖励 ×${lvl.reward}`,
-            { fontSize: 12, fill: isLocked ? 0x333333 : 0x99aacc },
+            `HP ×${lvl.hpMult}  密度 ×${lvl.spawnRate}  奖励 ×${lvl.reward}`,
+            { fontSize: 13, fill: isUnlocked ? 0xcceeff : 0x555555, fontWeight: 'bold' },
         );
-        diffTxt.x = 10; diffTxt.y = 218;
+        diffTxt.x = 10; diffTxt.y = 176;
         card.addChild(diffTxt);
 
+        // 解锁进度 - 提高文字清晰度
+        if (isUnlocked && lvl.id < LEVELS.length) {
+            const nextLvl = LEVELS.find(l => l.id === lvl.id + 1);
+            if (nextLvl) {
+                const prog = Math.min(1, bestScore / nextLvl.unlockScore);
+                const barY = 200;
+                const barBg = new PIXI.Graphics().beginFill(0x333333).drawRoundedRect(10, barY, 200, 10, 5).endFill();
+                const barFill = new PIXI.Graphics().beginFill(lvl.borderColor).drawRoundedRect(10, barY, 200 * prog, 10, 5).endFill();
+                card.addChild(barBg, barFill);
+                const progTxt = new PIXI.Text(`下关解锁: ${Math.floor(prog * 100)}% (${FloatingText.formatNumber(bestScore)}/${FloatingText.formatNumber(nextLvl.unlockScore)})`, {
+                    fontSize: 11, fill: 0xcccccc, fontWeight: 'bold',
+                });
+                progTxt.x = 10; progTxt.y = barY + 14;
+                card.addChild(progTxt);
+            }
+        }
+
         // 进入按钮
-        if (!isLocked) {
-            const btnColor = isCleared ? 0x005533 : 0x003377;
-            const btnBorderColor = isCleared ? 0x00ff88 : 0x0088ff;
+        if (isUnlocked) {
+            const btnColor = bestScore > 0 ? 0x005533 : 0x003377;
+            const btnBorderColor = bestScore > 0 ? 0x00ff88 : 0x0088ff;
             const btnBg = new PIXI.Graphics()
                 .beginFill(btnColor, 1)
                 .lineStyle(2, btnBorderColor, 1)
                 .drawRoundedRect(15, 265, 190, 42, 8)
                 .endFill();
-            const btnTxt = new PIXI.Text(isCleared ? '再次挑战' : '开始挑战', {
+            const btnTxt = new PIXI.Text(bestScore > 0 ? '再次挑战' : '开始挑战', {
                 fontSize: 18, fill: 0xffffff, fontWeight: 'bold',
             });
             btnTxt.anchor.set(0.5); btnTxt.x = 110; btnTxt.y = 286;
@@ -186,8 +224,8 @@ export class StagePage {
             card.on('pointerout', () => { bg.tint = 0xffffff; card.scale.set(1); });
             card.on('pointerdown', onEnter);
         } else {
-            const lockTxt = new PIXI.Text('完成上一关解锁', {
-                fontSize: 13, fill: 0x444444,
+            const lockTxt = new PIXI.Text(`需 ${FloatingText.formatNumber(lvl.unlockScore)} 分解锁`, {
+                fontSize: 14, fill: 0xff6666, fontWeight: 'bold', stroke: 0x330000, strokeThickness: 2,
             });
             lockTxt.anchor.set(0.5); lockTxt.x = 110; lockTxt.y = 284;
             card.addChild(lockTxt);

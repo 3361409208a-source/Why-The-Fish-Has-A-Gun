@@ -12,7 +12,20 @@ export class SaveManager {
         unlockedMaps: string[];
         weaponLevels: { [id: string]: number };
         goldUnlockedWeapons: string[];
-        clearedStages: number[];
+        /** 当前选择的层（默认1） */
+        currentLayer: number;
+        /** 每层当前选择的区域（默认1）{ layer: area } */
+        currentArea: { [layer: string]: number };
+        /** 每关历史最高分数（分层）{ layer: { levelId: bestScore } } */
+        layerStageScores: { [layer: string]: { [id: string]: number } };
+        /** 每层已解锁的关卡ID列表 { layer: [levelIds] } */
+        unlockedLayerStages: { [layer: string]: number[] };
+        /** 每层已解锁的区域列表 { layer: [areas] } */
+        unlockedLayerAreas: { [layer: string]: number[] };
+        /** 已解锁的层列表 */
+        unlockedLayers: number[];
+        /** 技能树解锁状态 { skillId: level } */
+        skillTree: { [id: string]: number };
     } = {
         gold: 1000,
         talents: {
@@ -22,9 +35,15 @@ export class SaveManager {
             critChance: 0
         },
         unlockedMaps: ['normal'],
-        weaponLevels: {}, // 武器等级持久化存储
-        goldUnlockedWeapons: [], // 永久解锁的武器 (金币购买)
-        clearedStages: [] as number[], // 已通关的关卡 ID 列表
+        weaponLevels: {},
+        goldUnlockedWeapons: [],
+        currentLayer: 1,
+        currentArea: { '1': 1, '2': 1, '3': 1 },
+        layerStageScores: { '1': {}, '2': {}, '3': {} },
+        unlockedLayerStages: { '1': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] },
+        unlockedLayerAreas: { '1': [1], '2': [1], '3': [1] },
+        unlockedLayers: [1],
+        skillTree: {},
     };
 
     /**
@@ -55,8 +74,41 @@ export class SaveManager {
                 if (parsed.weaponLevels) {
                     Object.assign(this.state.weaponLevels, parsed.weaponLevels);
                 }
+                // 新分层数据加载
+                this.state.currentLayer = parsed.currentLayer ?? this.state.currentLayer;
+                if (parsed.currentArea && typeof parsed.currentArea === 'object') {
+                    Object.assign(this.state.currentArea, parsed.currentArea);
+                }
+                if (parsed.layerStageScores && typeof parsed.layerStageScores === 'object') {
+                    Object.assign(this.state.layerStageScores, parsed.layerStageScores);
+                }
+                if (parsed.unlockedLayerStages && typeof parsed.unlockedLayerStages === 'object') {
+                    Object.assign(this.state.unlockedLayerStages, parsed.unlockedLayerStages);
+                }
+                if (parsed.unlockedLayerAreas && typeof parsed.unlockedLayerAreas === 'object') {
+                    Object.assign(this.state.unlockedLayerAreas, parsed.unlockedLayerAreas);
+                }
+                if (Array.isArray(parsed.unlockedLayers)) {
+                    this.state.unlockedLayers = parsed.unlockedLayers;
+                }
+                if (parsed.skillTree && typeof parsed.skillTree === 'object') {
+                    Object.assign(this.state.skillTree, parsed.skillTree);
+                }
+                // 向后兼容：旧存档 stageScores / unlockedStages 迁移到分层结构
+                if (parsed.stageScores && typeof parsed.stageScores === 'object') {
+                    // 将旧数据迁移到第1层
+                    Object.assign(this.state.layerStageScores['1'], parsed.stageScores);
+                }
+                if (Array.isArray(parsed.unlockedStages)) {
+                    this.state.unlockedLayerStages['1'] = parsed.unlockedStages;
+                }
                 if (Array.isArray(parsed.clearedStages)) {
-                    this.state.clearedStages = parsed.clearedStages;
+                    for (const lvlId of parsed.clearedStages) {
+                        const key = String(lvlId);
+                        if (!this.state.layerStageScores['1'][key]) {
+                            this.state.layerStageScores['1'][key] = 1;
+                        }
+                    }
                 }
             } catch (e) {
                 console.error('Failed to parse save data', e);

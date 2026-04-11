@@ -5,6 +5,7 @@ import { UIManager } from '../UIManager';
 import { Bullet } from '../entities/Bullet';
 import { WEAPONS, getWeapon } from '../config/weapons.config';
 import { UPGRADE } from '../config/balance.config';
+import { getSkillEffect, getSkillLevel } from '../config/skilltree.config';
 import { EventBus } from '../core/EventBus';
 import { GameEvents } from '../core/GameEvents';
 import type { GameContext } from './GameContext';
@@ -100,8 +101,10 @@ export class WeaponSystem {
         // --- 狂热(Berserk)逻辑实现 ---
         // 10s 为一个周期 (600帧 @60fps). 
         // 前 6s (360帧) 为能量收集阶段，后 4s (240帧) 为爆发阶段 (x5 射速)
-        const CYCLE_FRAMES = 600;
-        const BERSERK_DURATION = 240;
+        // 技能树：狂热延长，每级+60帧(1秒)
+        const berserkBoostFrames = getSkillEffect('berserkBoost');
+        const CYCLE_FRAMES = 600 + berserkBoostFrames;
+        const BERSERK_DURATION = 240 + berserkBoostFrames;
         const COLLECT_DURATION = CYCLE_FRAMES - BERSERK_DURATION;
 
         this.ctx.berserkTimer += delta;
@@ -122,17 +125,39 @@ export class WeaponSystem {
         // 更新 UI
         UIManager.updateBerserk(this.ctx.berserkCharge, this.ctx.isBerserk);
 
-        let fireRateMult = (window as any).TalentFireRateMult || 1.0;
+        // 技能树：射速超频，每级+5%射速
+        const skillFireRateBoost = 1 + getSkillEffect('fireRateBoost');
+        let fireRateMult = ((window as any).TalentFireRateMult || 1.0) * skillFireRateBoost;
         if (this.ctx.isBerserk) fireRateMult *= 5.0; // 狂热加成
 
         if (this.autoFireTimer > def.fireInterval / fireRateMult) {
             const angle = this.ctx.cannon.getFireAngle();
+            // 技能树：多管联装，额外增加炮管数量
+            const multiCannonLevel = getSkillLevel('multiCannon');
+            const extraBarrels = multiCannonLevel; // 每级+1个炮管
+            const totalBarrels = 1 + extraBarrels;
+
             const shots = def.multiShot ?? 1;
-            if (shots > 1) {
-                const spread = 0.2;
-                for (let s = 0; s < shots; s++) {
-                    const offset = (s - Math.floor(shots / 2)) * spread;
-                    this.fire(this.ctx.cannon.x, this.ctx.cannon.y, angle + offset);
+            const totalShots = shots * totalBarrels;
+
+            if (totalShots > 1) {
+                // 扇形散射：根据总炮管数计算散布角度
+                const baseSpread = 0.15; // 基础散布
+                const maxSpread = Math.min(0.6, baseSpread * totalBarrels); // 最大散布限制
+                const angleStep = totalBarrels > 1 ? maxSpread / (totalBarrels - 1) : 0;
+
+                for (let barrel = 0; barrel < totalBarrels; barrel++) {
+                    // 计算该炮管的基础角度偏移
+                    const barrelOffset = totalBarrels > 1
+                        ? (barrel - (totalBarrels - 1) / 2) * angleStep
+                        : 0;
+
+                    for (let s = 0; s < shots; s++) {
+                        const shotOffset = shots > 1
+                            ? (s - Math.floor(shots / 2)) * 0.1
+                            : 0;
+                        this.fire(this.ctx.cannon.x, this.ctx.cannon.y, angle + barrelOffset + shotOffset);
+                    }
                 }
             } else {
                 this.fire(this.ctx.cannon.x, this.ctx.cannon.y, angle);
@@ -176,7 +201,9 @@ export class WeaponSystem {
 
         const b = this.ctx.pool.get('bullet', () => new Bullet());
         if (!b) return;
-        const dmgMult = (window as any).TalentDmgMult || 1.0;
+        // 技能树：火力增幅，每级+8%伤害
+        const skillDmgBoost = 1 + getSkillEffect('damageBoost');
+        const dmgMult = ((window as any).TalentDmgMult || 1.0) * skillDmgBoost;
         const speedMult = (window as any).TalentSpeedMult || 1.0;
         b.setType(id, lvl, dmgMult, speedMult);
         // 传入炮眼位置和纯直线打击距离，做到与武器动画物理脱钩

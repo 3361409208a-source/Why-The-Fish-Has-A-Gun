@@ -69,3 +69,13 @@ export const ECONOMY = {
     nanoCoreBonus: 500,        // 拾取纳米核心奖励
     nanoCoreDropChance: 0.15,  // 鱼死亡后掉落概率
 };
+
+/** 技能树升级费用（叠加在 skilltree.config 的 costPerLevel 基础上） */
+export const SKILL_TREE = {
+    /** 每级费用递增倍率（实际费用 = costPerLevel × levelMultiplier^currentLevel） */
+    levelMultiplier: 1.5,
+    /** 计算某技能从 currentLevel 升到下一级的实际费用 */
+    getUpgradeCost: (costPerLevel: number, currentLevel: number): number => {
+        return Math.floor(costPerLevel * Math.pow(1.5, currentLevel));
+    },
+};

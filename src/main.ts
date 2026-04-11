@@ -39,7 +39,7 @@ import { UIManager } from './UIManager';
 import { SaveManager } from './SaveManager';
 import { getDialogue } from './config/dialogue.config';
 import { getMap } from './config/maps.config';
-import { LEVELS } from './config/levels.config';
+import { LEVELS, getLevelLocation, getLayerAreaLevels } from './config/levels.config';
 import { talentManager } from './core/TalentManager';
 
 /**
@@ -208,10 +208,14 @@ const initGame = async () => {
 
 
         // 启动新控制器 (传入完成后返回菜单的回调)
+        const stageLevel = config.stageLevel || 0;
         activeController = new GameController(app, config, dialogue, () => {
             SceneManager.isGaming = false; // 返回大厅，回显氛围鱼
             UIManager.showMapSelection(onMapSelected);
             SceneManager.setBackground('bg_ocean');
+        }, stageLevel, (newConfig) => {
+            // 重新开始下一关
+            onMapSelected(newConfig);
         });
 
         talentManager.syncToWindow();
@@ -219,8 +223,14 @@ const initGame = async () => {
 
     // 关卡模式切入逻辑
     const onStageSelected = async (levelId: number, config: any) => {
-        const lvlDef = LEVELS.find(l => l.id === levelId);
-        if (!lvlDef) return;
+        // 对于非区域1的关卡，需要从对应区域获取关卡定义
+        const { area, levelInArea } = getLevelLocation(levelId);
+        const areaLevels = getLayerAreaLevels(config.layer || 1, area);
+        const lvlDef = areaLevels.find((l: typeof LEVELS[0]) => l.id === levelId);
+        if (!lvlDef) {
+            console.error('[onStageSelected] Level not found:', levelId, 'area:', area, 'levelInArea:', levelInArea);
+            return;
+        }
 
         SceneManager.setBackground(lvlDef.bgKey || 'bg_ocean');
         SceneManager.isGaming = true;
@@ -259,6 +269,10 @@ const initGame = async () => {
             lvlDef.openingDialogue,
             backToLobby,
             levelId,
+            (newConfig) => {
+                // 重新开始下一关
+                onStageSelected(newConfig.stageLevel, newConfig);
+            },
         );
         talentManager.syncToWindow();
     };

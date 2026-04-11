@@ -4,6 +4,7 @@ import { SaveManager } from './SaveManager';
 import { FloatingText } from './ui/overlays/FloatingText';
 import { ConfirmOverlay } from './ui/overlays/ConfirmOverlay';
 import { DialogueOverlay } from './ui/overlays/DialogueOverlay';
+import { StageUnlockOverlay, UnlockChoice } from './ui/overlays/StageUnlockOverlay';
 import { BattleHUD } from './ui/battle/BattleHUD';
 import { ComboDisplay } from './ui/battle/ComboDisplay';
 import { WeaponShopPanel } from './ui/battle/WeaponShopPanel';
@@ -12,6 +13,7 @@ import { WeaponryPage } from './ui/lobby/WeaponryPage';
 import { ResearchPage } from './ui/lobby/ResearchPage';
 import { MallPage } from './ui/lobby/MallPage';
 import { StagePage } from './ui/lobby/StagePage';
+import { SkillTreePage } from './ui/lobby/SkillTreePage';
 import type { DialogueLine } from './config/dialogue.config';
 
 /**
@@ -88,6 +90,10 @@ export class UIManager {
         BattleHUD.updateBerserk(charge, isActive);
     }
 
+    public static updateStageScore(currentScore: number, requiredScore: number, levelId: number): void {
+        BattleHUD.updateStageScore(currentScore, requiredScore, levelId);
+    }
+
     public static setupShop(weapons: any[], onSelect: (id: string) => void, onUpgrade: (id: string) => void): void {
         WeaponShopPanel.setup(weapons, onSelect, onUpgrade);
     }
@@ -98,6 +104,10 @@ export class UIManager {
 
     public static showConfirm(message: string, title: string = '确认操作'): Promise<boolean> {
         return ConfirmOverlay.show(message, title);
+    }
+
+    public static showStageUnlockPrompt(currentScore: number, requiredScore: number, nextLevelName: string): Promise<UnlockChoice> {
+        return StageUnlockOverlay.show(currentScore, requiredScore, nextLevelName);
     }
 
     public static showDialogue(lines: DialogueLine[]): Promise<void> {
@@ -149,6 +159,10 @@ export class UIManager {
                 break;
             case 'mall':
                 MallPage.draw(this.mainPageContainer, (id) => this.switchPage(id));
+                this.drawBackButton();
+                break;
+            case 'skilltree':
+                SkillTreePage.draw(this.mainPageContainer, (id) => this.switchPage(id));
                 this.drawBackButton();
                 break;
             case 'stage':

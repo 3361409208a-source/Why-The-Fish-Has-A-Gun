@@ -17,6 +17,14 @@ export class Bullet extends PIXI.Sprite {
     public targetFish: Fish | null = null;
     public hitDistance: number = Infinity;
     public hasHit: boolean = false;
+    /** 穿透技能：已命中的鱼列表，避免重复命中 */
+    public hitFishList: Fish[] = [];
+    /** 是否为分裂弹产生的小子弹 */
+    public isSplitBullet: boolean = false;
+    /** 分裂弹追踪目标（自动追击最近的鱼） */
+    public homingTarget: Fish | null = null;
+    /** 追踪转向速率（弧度/帧） */
+    private static readonly HOMING_TURN_RATE = 0.08;
     private fireAngle: number = 0;
     private arcGfx: PIXI.Graphics | null = null;
 
@@ -101,6 +109,9 @@ export class Bullet extends PIXI.Sprite {
         this.visible = true;
         this.trailTimer = 0;
         this.hasHit = false;
+        this.hitFishList = [];
+        this.isSplitBullet = false;
+        this.homingTarget = null;
     }
 
     public update(delta: number): void {
@@ -119,6 +130,23 @@ export class Bullet extends PIXI.Sprite {
                 this.kill();
                 return;
             }
+        } else if (this.isSplitBullet && this.homingTarget && this.homingTarget.isActive) {
+            // 分裂弹自动追击模式：朝目标转向
+            const dx = this.homingTarget.x - this.x;
+            const dy = this.homingTarget.y - this.y;
+            const targetAngle = Math.atan2(dy, dx);
+            const currentAngle = Math.atan2(this.vy, this.vx);
+            // 计算最短转角
+            let angleDiff = targetAngle - currentAngle;
+            while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+            while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+            const turn = Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), Bullet.HOMING_TURN_RATE * delta);
+            const newAngle = currentAngle + turn;
+            this.vx = Math.cos(newAngle) * this.speed;
+            this.vy = Math.sin(newAngle) * this.speed;
+            this.rotation = newAngle + Math.PI / 2;
+            this.x += this.vx * delta;
+            this.y += this.vy * delta;
         } else {
             // 普通子弹飞行
             this.x += this.vx * delta;

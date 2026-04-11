@@ -2,6 +2,7 @@ import { SceneManager, Layers } from '../SceneManager';
 import { Fish } from '../entities/Fish';
 import { NanoCore } from '../entities/NanoCore';
 import { ECONOMY } from '../config/balance.config';
+import { LEVELS } from '../config/levels.config';
 import { EventBus } from '../core/EventBus';
 import { GameEvents } from '../core/GameEvents';
 import type { GameContext } from './GameContext';
@@ -9,8 +10,7 @@ import type { EffectSystem } from './EffectSystem';
 
 export class SpawnSystem {
     private spawnTimer: number = 0;
-    private stageBossFishes: Fish[] = []; // 当前已生成的关卡boss对象
-    private stageCleared: boolean = false;
+    private currentStageBoss: Fish | null = null; // 当前存活的关卡Boss
 
     constructor(private ctx: GameContext, private effects: EffectSystem) {}
 
@@ -39,39 +39,35 @@ export class SpawnSystem {
             this.spawnTimer = 0;
         }
 
-        // 关卡模式专属逻辑
-        if (this.ctx.stageLevel > 0 && !this.stageCleared) {
+        // 关卡模式：Boss重生逻辑
+        if (this.ctx.stageLevel > 0) {
             this.updateStageMode(delta);
         }
     }
 
     private updateStageMode(delta: number): void {
-        // 倒计时逐步生成每个 Boss
-        if (this.ctx.stageBossQueue.length > 0) {
+        // Boss被击杀后冷却计时，到时重新生成
+        if (!this.ctx.stageBossAlive) {
             this.ctx.stageBossSpawnTimer -= delta;
             if (this.ctx.stageBossSpawnTimer <= 0) {
-                const bossKey = this.ctx.stageBossQueue.shift()!;
-                const bossName = this.ctx.stageBossNames.shift()!;
-                const fish = this.spawnStageBoss(bossKey);
-                if (fish) {
-                    this.stageBossFishes.push(fish);
-                    EventBus.emit(GameEvents.STAGE_BOSS_SPAWNED, { bossKey, bossName });
+                const lvl = LEVELS.find(l => l.id === this.ctx.stageLevel);
+                if (lvl) {
+                    const fish = this.spawnStageBoss(lvl.bossKey);
+                    if (fish) {
+                        this.currentStageBoss = fish;
+                        this.ctx.stageBossAlive = true;
+                        EventBus.emit(GameEvents.STAGE_BOSS_SPAWNED, { bossKey: lvl.bossKey, bossName: lvl.bossName });
+                    }
                 }
-                this.ctx.stageBossSpawnTimer = this.ctx.stageBossSpawnInterval;
             }
         }
 
-        // 检查所有已生成的关卡 boss 是否全部被击杀
-        const allSpawned = this.ctx.stageBossQueue.length === 0;
-        if (allSpawned && this.stageBossFishes.length > 0) {
-            const killedCount = this.stageBossFishes.filter(f => !f.isActive).length;
-            if (killedCount > this.ctx.stageBossesKilled) {
-                this.ctx.stageBossesKilled = killedCount;
-            }
-            if (this.ctx.stageBossesKilled >= this.ctx.stageBossesTotal) {
-                this.stageCleared = true;
-                EventBus.emit(GameEvents.STAGE_CLEAR, { levelId: this.ctx.stageLevel });
-            }
+        // 检测当前Boss是否被击杀
+        if (this.ctx.stageBossAlive && this.currentStageBoss && !this.currentStageBoss.isActive) {
+            this.ctx.stageBossAlive = false;
+            this.ctx.stageBossSpawnTimer = this.ctx.stageBossSpawnInterval;
+            this.currentStageBoss = null;
+            EventBus.emit(GameEvents.STAGE_BOSS_KILLED, { levelId: this.ctx.stageLevel });
         }
     }
 

@@ -12,6 +12,14 @@ export class Fish extends PIXI.Sprite {
     private hitTimer: number = 0;
     private originalSpeed: number = 2;
 
+    // HP bar display (rendered in global UI layer for visibility)
+    private hpBarBg: PIXI.Graphics | null = null;
+    private hpBarFill: PIXI.Graphics | null = null;
+    private hpBarText: PIXI.Text | null = null;
+    private static readonly HP_BAR_WIDTH = 120;
+    private static readonly HP_BAR_HEIGHT = 16;
+    private static hpBarLayer: PIXI.Container | null = null;
+
     private behaviorTimer: number = 0;
     private isDashing: boolean = false;
     private dashTargetSpeed: number = 0;
@@ -262,10 +270,16 @@ export class Fish extends PIXI.Sprite {
         this.verticalVelocity = 0;
         this.scale.x = (this.vx > 0) ? -1 : 1;
         this.isActive = true;
+        // 立即创建HP条
+        this.createHpBar();
+        console.log(`[Fish] HP bar created for ${this.isBoss ? 'Boss' : 'Fish'} at (${this.x.toFixed(0)}, ${this.y.toFixed(0)}), HP: ${this.hp}/${this.maxHp}`);
     }
 
     public update(delta: number, nearbyFishes: Fish[] = []): void {
         if (!this.isActive) return;
+
+        // 同步HP条位置到世界坐标（HP条不在鱼内部，需要手动跟随）
+        this.syncHpBarPosition();
 
         this.behaviorTimer += delta;
         this.driftTimer += delta * 0.05;
@@ -383,12 +397,135 @@ export class Fish extends PIXI.Sprite {
     public takeDamage(dmg: number): boolean {
         this.hp -= dmg;
         this.hitTimer = 15;
+        this.updateHpBar();
         if (this.hp <= 0) { this.kill(); return true; }
         return false;
     }
 
+    /** Create HP bar in global UI layer */
+    private createHpBar(): void {
+        this.removeHpBar();
+
+        // 获取或创建全局HP条层（优先使用Game层如果UI层不可用）
+        if (!Fish.hpBarLayer) {
+            Fish.hpBarLayer = new PIXI.Container();
+            const uiLayer = SceneManager.getLayer(Layers.UI);
+            if (uiLayer) {
+                uiLayer.addChild(Fish.hpBarLayer);
+            } else {
+                // Fallback: 添加到游戏层最上方
+                const gameLayer = SceneManager.getLayer(Layers.Game);
+                if (gameLayer) gameLayer.addChild(Fish.hpBarLayer);
+            }
+        }
+
+        const barW = this.isBoss ? 160 : Fish.HP_BAR_WIDTH;
+        const barH = this.isBoss ? 20 : Fish.HP_BAR_HEIGHT;
+
+        // 背景条（高对比度）
+        this.hpBarBg = new PIXI.Graphics();
+        this.hpBarBg.lineStyle(3, 0xffff00, 1.0); // 亮黄边框
+        this.hpBarBg.beginFill(0x111111, 0.95).drawRoundedRect(0, 0, barW, barH, 4).endFill();
+        this.hpBarBg.pivot.set(barW/2, barH/2);
+        this.hpBarBg.visible = true;
+
+        // 填充条
+        this.hpBarFill = new PIXI.Graphics();
+        this.hpBarFill.beginFill(this.getHpColor(), 1.0).drawRoundedRect(0, 0, barW, barH, 4).endFill();
+        this.hpBarFill.pivot.set(barW/2, barH/2);
+        this.hpBarFill.visible = true;
+
+        // HP数值文字
+        this.hpBarText = new PIXI.Text(`${Math.ceil(this.hp)}/${this.maxHp}`, {
+            fontSize: this.isBoss ? 14 : 10,
+            fill: 0xffffff,
+            fontWeight: 'bold',
+            dropShadow: true,
+            dropShadowColor: 0x000000,
+            dropShadowDistance: 2,
+        });
+        this.hpBarText.anchor.set(0.5);
+        this.hpBarText.visible = true;
+
+        if (Fish.hpBarLayer) {
+            Fish.hpBarLayer.addChild(this.hpBarBg);
+            Fish.hpBarLayer.addChild(this.hpBarFill);
+            Fish.hpBarLayer.addChild(this.hpBarText);
+            console.log(`[Fish] HP bar added to layer, barW=${barW}, visible=${this.hpBarBg.visible}`);
+        } else {
+            console.warn('[Fish] HP bar layer not available!');
+        }
+
+        this.syncHpBarPosition();
+    }
+
+    /** Sync HP bar position to follow fish in world space */
+    private syncHpBarPosition(): void {
+        if (!this.hpBarBg || !this.hpBarFill || !this.parent) return;
+        // 计算鱼头顶的世界坐标（在鱼上方明显位置）
+        const yOffset = this.isBoss ? -this.hitRadius - 50 : -60;
+        const cos = Math.cos(this.rotation);
+        const sin = Math.sin(this.rotation);
+        const localX = 0;
+        const localY = yOffset;
+        const worldX = this.x + localX * cos - localY * sin;
+        const worldY = this.y + localX * sin + localY * cos;
+
+        this.hpBarBg.x = worldX;
+        this.hpBarBg.y = worldY;
+        this.hpBarFill.x = worldX;
+        this.hpBarFill.y = worldY;
+
+        if (this.hpBarText) {
+            this.hpBarText.x = worldX;
+            this.hpBarText.y = worldY;
+            this.hpBarText.text = `${Math.ceil(this.hp)}/${this.maxHp}`;
+        }
+    }
+
+    /** Update HP bar fill based on current HP */
+    private updateHpBar(): void {
+        if (!this.hpBarFill || !this.hpBarBg) return;
+        const barW = this.isBoss ? 160 : Fish.HP_BAR_WIDTH;
+        const barH = this.isBoss ? 20 : Fish.HP_BAR_HEIGHT;
+        const hpPercent = Math.max(0, this.hp / this.maxHp);
+
+        // 重绘填充条（从左上角0,0绘制，pivot居中）
+        this.hpBarFill.clear();
+        this.hpBarFill.beginFill(this.getHpColor(), 1.0).drawRoundedRect(0, 0, barW * hpPercent, barH, 4).endFill();
+        this.hpBarFill.pivot.set(barW/2, barH/2);
+    }
+
+    /** Get HP bar color based on HP percentage */
+    private getHpColor(): number {
+        const percent = this.hp / this.maxHp;
+        if (percent > 0.6) return 0x00ff00; // Green
+        if (percent > 0.3) return 0xffcc00; // Yellow
+        return 0xff0000; // Red
+    }
+
+    /** Remove HP bar from global layer */
+    private removeHpBar(): void {
+        if (this.hpBarBg) {
+            if (this.hpBarBg.parent) this.hpBarBg.parent.removeChild(this.hpBarBg);
+            this.hpBarBg.destroy();
+            this.hpBarBg = null;
+        }
+        if (this.hpBarFill) {
+            if (this.hpBarFill.parent) this.hpBarFill.parent.removeChild(this.hpBarFill);
+            this.hpBarFill.destroy();
+            this.hpBarFill = null;
+        }
+        if (this.hpBarText) {
+            if (this.hpBarText.parent) this.hpBarText.parent.removeChild(this.hpBarText);
+            this.hpBarText.destroy();
+            this.hpBarText = null;
+        }
+    }
+
     public kill(): void {
         this.isActive = false; this.visible = false;
+        this.removeHpBar();
         if (this.mesh) { this.removeChild(this.mesh); this.mesh = null; }
     }
 }
