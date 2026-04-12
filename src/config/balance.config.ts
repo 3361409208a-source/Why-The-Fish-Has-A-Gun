@@ -35,7 +35,7 @@ export const TALENT = {
     goldBonusPerLevel: 0.2,     // 每级+20%金币
     critChanceBase: 0.05,       // 基础暴击率5%
     critChancePerLevel: 0.05,   // 每级+5%暴击率
-    critDamageMultiplier: 3.0,  // 暴击伤害倍率
+    critDamageMultiplier: 6.0,  // 暴击伤害倍率
 };
 
 /** 子弹等级成长 */

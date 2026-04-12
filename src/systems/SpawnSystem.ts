@@ -24,14 +24,14 @@ export class SpawnSystem {
     update(delta: number): void {
         // 常规鱼群刷新
         this.spawnTimer += delta;
-        const baseInterval = 180 / this.ctx.spawnRate;
+        const baseInterval = 100 / this.ctx.spawnRate;
         if (this.spawnTimer > baseInterval + Math.random() * baseInterval) {
-            const maxSwarm = Math.min(6, Math.floor(1 + this.ctx.spawnRate * 1.5));
-            const swarmCount = Math.floor(Math.random() * maxSwarm) + 1;
+            const maxSwarm = Math.min(12, Math.floor(2 + this.ctx.spawnRate * 2.5));
+            const swarmCount = Math.floor(Math.random() * maxSwarm) + 2;
             const baseSpawnY = 100 + Math.random() * (SceneManager.height - 300);
             for (let i = 0; i < swarmCount; i++) {
                 setTimeout(() => {
-                    if (this.ctx.fishes.length < 150) {
+                    if (this.ctx.fishes.length < 250) {
                         this.spawnFish(baseSpawnY + (Math.random() - 0.5) * 80);
                     }
                 }, i * (Math.random() * 300 + 150));

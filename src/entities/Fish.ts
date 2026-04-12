@@ -266,6 +266,9 @@ export class Fish extends PIXI.Sprite {
 
         this.hp *= mapMult;
         this.maxHp = this.hp;
+        this.originalSpeed *= 1.8;
+        this.vx *= 1.8;
+        this.vy *= 1.8;
         this.speed = this.originalSpeed;
         this.verticalVelocity = 0;
         this.scale.x = (this.vx > 0) ? -1 : 1;

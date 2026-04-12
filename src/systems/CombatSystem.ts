@@ -4,7 +4,7 @@ import { Fish } from '../entities/Fish';
 import { Bullet } from '../entities/Bullet';
 import { EventBus } from '../core/EventBus';
 import { GameEvents } from '../core/GameEvents';
-import { COMBO, CHAIN, ECONOMY, AOE } from '../config/balance.config';
+import { COMBO, CHAIN, ECONOMY, AOE, TALENT } from '../config/balance.config';
 import { getSkillEffect, getSkillLevel } from '../config/skilltree.config';
 import type { GameContext } from './GameContext';
 import type { EffectSystem } from './EffectSystem';
@@ -200,7 +200,7 @@ export class CombatSystem {
         const comboBonus = 1 + Math.min(COMBO.maxDmgBonus, this.ctx.comboCount * COMBO.dmgBonusPerCombo);
         const critChance = allowCrit ? ((window as any).TalentCritChance || 0) : 0;
         // 技能树：暴击强化，每级+0.5暴击倍率
-        const critBoostMult = 3.0 + getSkillEffect('critBoost');
+        const critBoostMult = TALENT.critDamageMultiplier + getSkillEffect('critBoost');
         let finalDmg = dmg * comboBonus;
         let isCrit = false;
         if (Math.random() < critChance) { finalDmg *= critBoostMult; isCrit = true; }
