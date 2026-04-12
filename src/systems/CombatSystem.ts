@@ -243,7 +243,7 @@ export class CombatSystem {
                         const areaLevels = getLayerAreaLevels(currentLayer, currentArea);
                         const nextLevelInArea = levelInArea + 1;
                         const nextLvl = nextLevelInArea <= LEVELS_PER_AREA
-                            ? areaLevels.find((l: typeof areaLevels[0]) => l.id === nextLevelInArea)
+                            ? areaLevels[nextLevelInArea - 1]
                             : null;
                         const requiredScore = nextLvl ? nextLvl.unlockScore : 0;
 

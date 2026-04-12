@@ -67,8 +67,6 @@ export class StagePage {
         const unlockedStages = SaveManager.state.unlockedLayerStages[layerKey] || [1];
         const stageScores = SaveManager.state.layerStageScores[layerKey] || {};
 
-        console.log('[StagePage] areaLevels count:', areaLevels.length, 'unlockedStages:', unlockedStages);
-
         areaLevels.forEach((lvl, i) => {
             const col = i % cols;
             const row = Math.floor(i / cols);
@@ -81,10 +79,7 @@ export class StagePage {
             const isUnlocked = lvl.unlockScore === 0 || unlockedStages.includes(globalLevelId);
             const bestScore = stageScores[String(globalLevelId)] || 0;
 
-            console.log('[StagePage] Level:', lvl.id, 'name:', lvl.name, 'isUnlocked:', isUnlocked, 'unlockScore:', lvl.unlockScore);
-
             const card = this.createLevelCard(lvl, isUnlocked, bestScore, () => {
-                console.log('[StagePage] Level card clicked:', globalLevelId, 'isUnlocked:', isUnlocked);
                 if (!isUnlocked) {
                     FloatingText.show(W / 2, 200, '该关卡尚未解锁！', 0xff0000);
                     return;
@@ -112,13 +107,36 @@ export class StagePage {
         const borderColor = isUnlocked ? lvl.borderColor : 0x333333;
         const alpha = isUnlocked ? 1.0 : 0.45;
 
-        // 背景 - 提高不透明度以改善文字可读性
-        const bg = new PIXI.Graphics()
-            .beginFill(0x0a0f1a, isUnlocked ? 0.98 : 0.85)
-            .lineStyle(3, borderColor, 1)
-            .drawRoundedRect(0, 0, 220, 320, 12)
-            .endFill();
+        // 背景 - 渐变效果
+        const bg = new PIXI.Graphics();
+        bg.beginFill(0x0a0f1a, isUnlocked ? 0.98 : 0.85);
+        bg.lineStyle(4, borderColor, 1);
+        bg.drawRoundedRect(0, 0, 220, 320, 12);
+        bg.endFill();
         card.addChild(bg);
+
+        // 渐变层
+        const gradientTop = new PIXI.Graphics();
+        gradientTop.beginFill(0x1a2a3a, 0.3);
+        gradientTop.drawRoundedRect(0, 0, 220, 160, 12);
+        gradientTop.endFill();
+        card.addChild(gradientTop);
+
+        // 内阴影
+        const innerShadow = new PIXI.Graphics();
+        innerShadow.lineStyle(2, 0x000000, 0.4);
+        innerShadow.drawRoundedRect(3, 3, 214, 314, 10);
+        innerShadow.endFill();
+        card.addChild(innerShadow);
+
+        // 发光效果（已解锁时）
+        if (isUnlocked) {
+            const glow = new PIXI.Graphics();
+            glow.lineStyle(3, borderColor, 0.2);
+            glow.drawRoundedRect(-2, -2, 224, 324, 14);
+            glow.endFill();
+            card.addChildAt(glow, 0);
+        }
 
         // Boss头像
         const avatarTex = AssetManager.textures[lvl.bossAvatar];
@@ -209,19 +227,39 @@ export class StagePage {
         if (isUnlocked) {
             const btnColor = bestScore > 0 ? 0x005533 : 0x003377;
             const btnBorderColor = bestScore > 0 ? 0x00ff88 : 0x0088ff;
-            const btnBg = new PIXI.Graphics()
-                .beginFill(btnColor, 1)
-                .lineStyle(2, btnBorderColor, 1)
-                .drawRoundedRect(15, 265, 190, 42, 8)
-                .endFill();
+            // 按钮渐变背景
+            const btnBg = new PIXI.Graphics();
+            btnBg.beginFill(btnColor, 1);
+            btnBg.lineStyle(3, btnBorderColor, 1);
+            btnBg.drawRoundedRect(15, 265, 190, 42, 8);
+            btnBg.endFill();
+            // 按钮高光
+            const btnHighlight = new PIXI.Graphics();
+            btnHighlight.beginFill(0xffffff, 0.15);
+            btnHighlight.drawRoundedRect(17, 267, 186, 20, 6);
+            btnHighlight.endFill();
+            // 按钮发光
+            const btnGlow = new PIXI.Graphics();
+            btnGlow.lineStyle(2, btnBorderColor, 0.3);
+            btnGlow.drawRoundedRect(13, 263, 194, 46, 10);
+            btnGlow.endFill();
             const btnTxt = new PIXI.Text(bestScore > 0 ? '再次挑战' : '开始挑战', {
                 fontSize: 18, fill: 0xffffff, fontWeight: 'bold',
+                stroke: 0x000000, strokeThickness: 2,
             });
             btnTxt.anchor.set(0.5); btnTxt.x = 110; btnTxt.y = 286;
-            card.addChild(btnBg, btnTxt);
+            card.addChild(btnGlow, btnBg, btnHighlight, btnTxt);
             card.eventMode = 'static'; card.cursor = 'pointer';
-            card.on('pointerover', () => { bg.tint = 0x223344; card.scale.set(1.03); });
-            card.on('pointerout', () => { bg.tint = 0xffffff; card.scale.set(1); });
+            card.on('pointerover', () => {
+                bg.tint = 0x1a2a3a;
+                btnGlow.alpha = 0.6;
+                card.scale.set(1.02);
+            });
+            card.on('pointerout', () => {
+                bg.tint = 0xffffff;
+                btnGlow.alpha = 1;
+                card.scale.set(1);
+            });
             card.on('pointerdown', onEnter);
         } else {
             const lockTxt = new PIXI.Text(`需 ${FloatingText.formatNumber(lvl.unlockScore)} 分解锁`, {

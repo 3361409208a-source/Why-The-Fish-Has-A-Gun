@@ -19,8 +19,6 @@ export class LobbyPage {
         const unlockedAreas = SaveManager.state.unlockedLayerAreas[layerKey] || [1];
         const maxArea = Math.max(...unlockedAreas, 1); // 确保至少为1
 
-        console.log('[LobbyPage] currentLayer:', currentLayer, 'currentArea:', currentArea, 'unlockedAreas:', unlockedAreas, 'maxArea:', maxArea);
-
         // 显示3个区域卡片
         this.drawAreaCards(container, currentLayer, currentArea, unlockedAreas, maxArea, onMapSelected, onMenuHide, onSwitchPage);
 
@@ -48,7 +46,6 @@ export class LobbyPage {
 
         // 确定3个显示的区域：始终包含区域1，然后是当前、下一区域
         const areasToShow: number[] = [1]; // 始终显示第一区域
-        console.log('[LobbyPage] Initial areasToShow:', areasToShow, 'currentArea:', currentArea, 'maxArea:', maxArea);
         // 添加当前区域（如果不是区域1）
         if (currentArea !== 1 && !areasToShow.includes(currentArea)) {
             areasToShow.push(currentArea);
@@ -71,8 +68,6 @@ export class LobbyPage {
             areasToShow.pop();
         }
 
-        console.log('[LobbyPage] Final areasToShow:', areasToShow);
-
         areasToShow.forEach((areaNum, i) => {
             const isUnlocked = areaNum <= maxArea;
             const isCurrent = areaNum === currentArea;
@@ -92,9 +87,7 @@ export class LobbyPage {
             });
 
             const x = startX + i * (cardW + gap);
-            console.log('[LobbyPage] Creating area card:', areaNum, 'isUnlocked:', isUnlocked, 'isCurrent:', isCurrent, 'progress:', areaProgress);
             const card = this.createAreaCard(areaNum, isUnlocked, isCurrent, areaProgress, totalLevels, () => {
-                console.log('[LobbyPage] Area card clicked:', areaNum, 'isUnlocked:', isUnlocked);
                 if (!isUnlocked) {
                     FloatingText.show(SceneManager.width / 2, 200, '该区域尚未解锁！', 0xff0000);
                     return;
@@ -125,14 +118,43 @@ export class LobbyPage {
         const borderColor = isCurrent ? 0x00e5ff : (isUnlocked ? 0x4a6fa5 : 0x333333);
         const alpha = isUnlocked ? 1.0 : 0.5;
 
-        // 背景
-        const bg = new PIXI.Graphics()
-            .beginFill(0x0a0f1a, 0.92)
-            .lineStyle(3, borderColor, 1)
-            .drawRoundedRect(0, 0, cardW, cardH, 16)
-            .endFill();
+        // 背景 - 多层矩形模拟渐变
+        const bg = new PIXI.Graphics();
+        bg.beginFill(0x1a2a3a, 0.95);
+        bg.lineStyle(4, borderColor, 1);
+        bg.drawRoundedRect(0, 0, cardW, cardH, 16);
+        bg.endFill();
         bg.alpha = alpha;
         card.addChild(bg);
+
+        // 渐变层
+        const gradientTop = new PIXI.Graphics();
+        gradientTop.beginFill(0x0f1a25, 0.4);
+        gradientTop.drawRoundedRect(0, 0, cardW, cardH / 2, 16);
+        gradientTop.endFill();
+        card.addChild(gradientTop);
+
+        const gradientBottom = new PIXI.Graphics();
+        gradientBottom.beginFill(0x050810, 0.6);
+        gradientBottom.drawRoundedRect(0, cardH / 2, cardW, cardH / 2, 0);
+        gradientBottom.endFill();
+        card.addChild(gradientBottom);
+
+        // 添加内阴影效果
+        const innerShadow = new PIXI.Graphics();
+        innerShadow.lineStyle(2, 0x000000, 0.5);
+        innerShadow.drawRoundedRect(4, 4, cardW - 8, cardH - 8, 12);
+        innerShadow.endFill();
+        card.addChild(innerShadow);
+
+        // 添加发光效果（当前选中时）
+        if (isCurrent) {
+            const glow = new PIXI.Graphics();
+            glow.lineStyle(6, 0x00e5ff, 0.3);
+            glow.drawRoundedRect(-3, -3, cardW + 6, cardH + 6, 18);
+            glow.endFill();
+            card.addChildAt(glow, 0);
+        }
 
         // 当前标记
         if (isCurrent) {
@@ -556,10 +578,25 @@ export class LobbyPage {
 
             const bg = new PIXI.Graphics();
             const bw = 260; const bh = 90; const slant = 25;
-            bg.beginFill(0x050e1a, 0.7);
-            bg.lineStyle(2, 0x3a4a5e, 1);
+            // 渐变背景
+            bg.beginFill(0x050e1a, 0.85);
+            bg.lineStyle(3, 0x3a4a5e, 1);
             bg.drawPolygon([slant, 0, bw, 0, bw - slant, bh, 0, bh]);
             bg.endFill();
+
+            // 顶部高光
+            const highlight = new PIXI.Graphics();
+            highlight.beginFill(0x1a2a3a, 0.4);
+            highlight.drawPolygon([slant, 0, bw, 0, bw - slant, 30, slant, 30]);
+            highlight.endFill();
+            tabBtn.addChild(highlight);
+
+            // 内阴影
+            const innerShadow = new PIXI.Graphics();
+            innerShadow.lineStyle(1, 0x000000, 0.5);
+            innerShadow.drawPolygon([slant + 2, 2, bw - 2, 2, bw - slant - 2, bh - 2, 2, bh - 2]);
+            innerShadow.endFill();
+            tabBtn.addChild(innerShadow);
 
             const iconTex = AssetManager.textures[tab.icon];
             if (iconTex) {
@@ -575,8 +612,16 @@ export class LobbyPage {
 
             tabBtn.addChild(bg, txt, desc);
             tabBtn.eventMode = 'static'; tabBtn.cursor = 'pointer';
-            tabBtn.on('pointerover', () => { bg.tint = 0x00f0ff; tabBtn.scale.set(1.05); });
-            tabBtn.on('pointerout', () => { bg.tint = 0xffffff; tabBtn.scale.set(1); });
+            tabBtn.on('pointerover', () => {
+                bg.tint = 0x1a3a5a;
+                highlight.tint = 0x2a4a6a;
+                tabBtn.scale.set(1.03);
+            });
+            tabBtn.on('pointerout', () => {
+                bg.tint = 0xffffff;
+                highlight.tint = 0xffffff;
+                tabBtn.scale.set(1);
+            });
             tabBtn.on('pointerdown', () => onSwitchPage(tab.id));
             nav.addChild(tabBtn);
         });

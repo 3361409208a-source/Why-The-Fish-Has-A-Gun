@@ -100,7 +100,8 @@ export class SaveManager {
                     Object.assign(this.state.layerStageScores['1'], parsed.stageScores);
                 }
                 if (Array.isArray(parsed.unlockedStages)) {
-                    this.state.unlockedLayerStages['1'] = parsed.unlockedStages;
+                    // 只保留区域1的关卡ID（1-10），过滤掉其他区域的数据
+                    this.state.unlockedLayerStages['1'] = parsed.unlockedStages.filter((id: number) => id >= 1 && id <= 10);
                 }
                 if (Array.isArray(parsed.clearedStages)) {
                     for (const lvlId of parsed.clearedStages) {
@@ -112,6 +113,19 @@ export class SaveManager {
                 }
             } catch (e) {
                 console.error('Failed to parse save data', e);
+            }
+        }
+
+        // 清理无效的关卡ID - 只保留区域1的1-10，移除区域2+的关卡
+        for (const layerKey in this.state.unlockedLayerStages) {
+            const stages = this.state.unlockedLayerStages[layerKey];
+            if (Array.isArray(stages)) {
+                // 只保留区域1的关卡（ID 1-10）
+                const filtered = stages.filter((id: number) => id >= 1 && id <= 10);
+                if (filtered.length !== stages.length) {
+                    this.state.unlockedLayerStages[layerKey] = filtered;
+                    SaveManager.save(); // 立即保存清理后的存档
+                }
             }
         }
     }

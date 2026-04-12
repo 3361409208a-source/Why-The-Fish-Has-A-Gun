@@ -89,7 +89,8 @@ export class SceneManager {
         this.createLayer(Layers.Player, 15);    // 玩家炮台：在鱼上方、子弹下方
         this.createLayer(Layers.Bullet, 20);    // 子弹（强制在鱼上方）
         this.createLayer(Layers.FX, 30);        // 粒子特效
-        this.createLayer(Layers.UI, 100);       // 最顶层
+        this.createLayer(Layers.UI, 100);       // UI层
+        this.createLayer(Layers.Story, 200);    // 剧情对话层（最高层）
 
         this.applyResize();
         window.addEventListener('resize', () => this.applyResize());

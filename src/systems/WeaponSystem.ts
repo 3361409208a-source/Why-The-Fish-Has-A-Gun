@@ -156,17 +156,17 @@ export class WeaponSystem {
                         const shotOffset = shots > 1
                             ? (s - Math.floor(shots / 2)) * 0.1
                             : 0;
-                        this.fire(this.ctx.cannon.x, this.ctx.cannon.y, angle + barrelOffset + shotOffset);
+                        this.fire(this.ctx.cannon.x, this.ctx.cannon.y, angle + barrelOffset + shotOffset, fireRateMult);
                     }
                 }
             } else {
-                this.fire(this.ctx.cannon.x, this.ctx.cannon.y, angle);
+                this.fire(this.ctx.cannon.x, this.ctx.cannon.y, angle, fireRateMult);
             }
             this.autoFireTimer = 0;
         }
     }
 
-    fire(x: number, y: number, angle: number): void {
+    fire(x: number, y: number, angle: number, fireRateMult: number = 1.0): void {
         const id = this.ctx.unlockedWeapons[this.ctx.currentWeaponIndex];
         const lvl = this.ctx.weaponLevels[id] || 1;
 
@@ -204,7 +204,8 @@ export class WeaponSystem {
         // 技能树：火力增幅，每级+8%伤害
         const skillDmgBoost = 1 + getSkillEffect('damageBoost');
         const dmgMult = ((window as any).TalentDmgMult || 1.0) * skillDmgBoost;
-        const speedMult = (window as any).TalentSpeedMult || 1.0;
+        // 子弹速度随射速提升（取平方根，避免速度过于夸张）
+        const speedMult = ((window as any).TalentSpeedMult || 1.0) * Math.sqrt(fireRateMult);
         b.setType(id, lvl, dmgMult, speedMult);
         // 传入炮眼位置和纯直线打击距离，做到与武器动画物理脱钩
         b.fire(muzzlePos.x, muzzlePos.y, angle, lightningTarget, lightningDist);
