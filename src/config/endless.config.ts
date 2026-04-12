@@ -58,8 +58,8 @@ export function getEndlessDifficulty(level: number): EndlessDifficulty {
     const spawnRate = parseFloat(Math.min(0.7 * Math.pow(1.12, n - 1), 15.0).toFixed(2));
     const reward = parseFloat((1.0 * Math.pow(1.25, n - 1)).toFixed(2));
 
-    // 解锁所需分数：难度1-3免费，之后指数递增
-    const unlockScore = n <= 3 ? 0 : Math.floor(5000 * Math.pow(2.2, n - 4));
+    // 全部难度默认解锁
+    const unlockScore = 0;
 
     const name = level <= DIFFICULTY_NAMES.length
         ? DIFFICULTY_NAMES[idx]
