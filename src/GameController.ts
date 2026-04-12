@@ -69,6 +69,7 @@ export class GameController {
             manualAimY: 0,
             frozenTime: 0,
             stageLevel,
+            isEndless: config.isEndless ?? false,
             stageScore: 0,
             stageBossSpawnTimer: 0,
             stageBossSpawnInterval: 0,
@@ -141,6 +142,9 @@ export class GameController {
                 UIManager.updateHUD(this.ctx.crystals);
                 import('./ui/battle/BattleHUD').then(({ BattleHUD }) => {
                     BattleHUD.show();
+                });
+                import('./ui/battle/WeaponShopPanel').then(({ WeaponShopPanel }) => {
+                    WeaponShopPanel.show();
                 });
             });
         }

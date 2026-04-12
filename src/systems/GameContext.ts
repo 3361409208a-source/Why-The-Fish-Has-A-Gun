@@ -77,6 +77,8 @@ export interface GameContext {
     frozenTime: number;
     // 关卡模式（0 = 随机模式，1-10 = 关卡模式）
     stageLevel: number;
+    /** 是否为无尽模式 */
+    isEndless: boolean;
     /** 本局累积分数（击杀+拾取都计入） */
     stageScore: number;
     stageBossSpawnTimer: number;   // Boss 被击杀后重新生成的冷却倒计时（帧）

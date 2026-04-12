@@ -64,7 +64,8 @@ export class BattleHUD {
     /** 更新关卡分数和解锁进度显示 */
     public static updateStageScore(currentScore: number, requiredScore: number, levelId: number): void {
         if (this.stageScoreText) {
-            this.stageScoreText.text = `关卡分数: ${Math.floor(currentScore).toLocaleString()}`;
+            const label = levelId === 0 ? '无尽得分' : '关卡分数';
+            this.stageScoreText.text = `${label}: ${Math.floor(currentScore).toLocaleString()}`;
             this.stageScoreText.visible = true;
         }
 
@@ -93,7 +94,9 @@ export class BattleHUD {
         }
 
         if (this.stageProgressText) {
-            if (requiredScore > 0) {
+            if (levelId === 0) {
+                this.stageProgressText.text = '无尽模式 — 挑战极限！';
+            } else if (requiredScore > 0) {
                 this.stageProgressText.text = `${Math.floor(currentScore).toLocaleString()} / ${Math.floor(requiredScore).toLocaleString()} (解锁下一关)`;
             } else {
                 this.stageProgressText.text = '已解锁全部关卡';

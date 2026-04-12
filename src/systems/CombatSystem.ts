@@ -229,41 +229,50 @@ export class CombatSystem {
             const val = baseCrystal * 2 * this.ctx.rewardMultiplier * goldMult * skillGoldBoost * (1 + this.ctx.comboCount * COMBO.goldBonusPerCombo);
             this.ctx.crystals += val;
 
-            // 关卡模式：累积分数
-            if (this.ctx.stageLevel > 0) {
+            // 关卡模式 & 无尽模式：累积分数
+            if (this.ctx.stageLevel > 0 || this.ctx.isEndless) {
                 const scoreVal = (fish as any).isBoss ? 500 : Math.floor(val);
                 this.ctx.stageScore += scoreVal;
 
-                // 获取下一关所需分数
-                import('../config/levels.config').then(({ getLayerLevels, LEVELS_PER_AREA, getLayerAreaLevels }) => {
-                    import('../SaveManager').then(({ SaveManager }) => {
-                        const currentLayer = SaveManager.state.currentLayer || 1;
-                        const currentArea = SaveManager.state.currentArea[String(currentLayer)] || 1;
-                        const levelInArea = ((this.ctx.stageLevel - 1) % LEVELS_PER_AREA) + 1;
-                        const areaLevels = getLayerAreaLevels(currentLayer, currentArea);
-                        const nextLevelInArea = levelInArea + 1;
-                        const nextLvl = nextLevelInArea <= LEVELS_PER_AREA
-                            ? areaLevels[nextLevelInArea - 1]
-                            : null;
-                        const requiredScore = nextLvl ? nextLvl.unlockScore : 0;
+                if (this.ctx.isEndless) {
+                    // 无尽模式：直接更新HUD，无需解锁逻辑
+                    EventBus.emit(GameEvents.UI_STAGE_SCORE_UPDATE, {
+                        currentScore: this.ctx.stageScore,
+                        requiredScore: 0,
+                        levelId: 0,
+                    });
+                } else {
+                    // 获取下一关所需分数
+                    import('../config/levels.config').then(({ LEVELS_PER_AREA, getLayerAreaLevels }) => {
+                        import('../SaveManager').then(({ SaveManager }) => {
+                            const currentLayer = SaveManager.state.currentLayer || 1;
+                            const currentArea = SaveManager.state.currentArea[String(currentLayer)] || 1;
+                            const levelInArea = ((this.ctx.stageLevel - 1) % LEVELS_PER_AREA) + 1;
+                            const areaLevels = getLayerAreaLevels(currentLayer, currentArea);
+                            const nextLevelInArea = levelInArea + 1;
+                            const nextLvl = nextLevelInArea <= LEVELS_PER_AREA
+                                ? areaLevels[nextLevelInArea - 1]
+                                : null;
+                            const requiredScore = nextLvl ? nextLvl.unlockScore : 0;
 
-                        EventBus.emit(GameEvents.UI_STAGE_SCORE_UPDATE, {
-                            currentScore: this.ctx.stageScore,
-                            requiredScore,
-                            levelId: this.ctx.stageLevel,
-                        });
-
-                        // 检测是否刚达到解锁分数（仅检测一次）
-                        if (nextLvl && this.ctx.stageScore >= requiredScore && !this.ctx.stageUnlockShown) {
-                            this.ctx.stageUnlockShown = true;
-                            EventBus.emit(GameEvents.STAGE_UNLOCK_REACHED, {
+                            EventBus.emit(GameEvents.UI_STAGE_SCORE_UPDATE, {
                                 currentScore: this.ctx.stageScore,
                                 requiredScore,
-                                nextLevelName: nextLvl.name,
+                                levelId: this.ctx.stageLevel,
                             });
-                        }
+
+                            // 检测是否刚达到解锁分数（仅检测一次）
+                            if (nextLvl && this.ctx.stageScore >= requiredScore && !this.ctx.stageUnlockShown) {
+                                this.ctx.stageUnlockShown = true;
+                                EventBus.emit(GameEvents.STAGE_UNLOCK_REACHED, {
+                                    currentScore: this.ctx.stageScore,
+                                    requiredScore,
+                                    nextLevelName: nextLvl.name,
+                                });
+                            }
+                        });
                     });
-                });
+                }
             }
 
             import('../SaveManager').then(({ SaveManager }) => {
