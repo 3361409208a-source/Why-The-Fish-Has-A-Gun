@@ -31,7 +31,7 @@ export class SpawnSystem {
             const baseSpawnY = 100 + Math.random() * (SceneManager.height - 300);
             for (let i = 0; i < swarmCount; i++) {
                 setTimeout(() => {
-                    if (this.ctx.fishes.length < 250) {
+                    if (this.ctx.fishes.length < 120) {
                         this.spawnFish(baseSpawnY + (Math.random() - 0.5) * 80);
                     }
                 }, i * (Math.random() * 300 + 150));

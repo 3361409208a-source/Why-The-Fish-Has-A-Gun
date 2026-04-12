@@ -13,14 +13,15 @@ export class FloatingText {
     }
 
     public static show(x: number, y: number, text: string, color: number = 0xffffff, isCrit: boolean = false): void {
-        const baseSize = isCrit ? 44 : (text.startsWith('+') ? 22 : 16 + Math.random() * 6);
-        const t = new PIXI.Text(text, {
+        const displayText = isCrit ? `暴击！${text}` : text;
+        const baseSize = isCrit ? 46 : (text.startsWith('+') ? 22 : 16 + Math.random() * 6);
+        const t = new PIXI.Text(displayText, {
             fontFamily: 'Verdana, Geneva, sans-serif',
             fontSize: baseSize,
-            fill: color,
+            fill: isCrit ? 0xff2200 : color,
             fontWeight: '900',
-            stroke: isCrit ? '#ffffff' : '#000000',
-            strokeThickness: isCrit ? 2 : 4,
+            stroke: isCrit ? '#ffff00' : '#000000',
+            strokeThickness: isCrit ? 3 : 4,
             dropShadow: true,
             dropShadowColor: '#000000',
             dropShadowDistance: 2
@@ -31,24 +32,21 @@ export class FloatingText {
         this.renderLayer.addChild(t);
 
         let elapsed = 0;
-        // 3秒持续展示时，避免文字“飞走”（太上/太下都不舒服）
-        const vy = -1.2 - Math.random() * 0.8;
-        const vx = (Math.random() - 0.5) * 1.2;
-        t.scale.set(0.2);
-        const totalFrames = 180; // ~3s @ 60fps
-        const fadeStart = 120;   // start fading after ~2s
+        const vy = -1.8 - Math.random() * 1.0;
+        const vx = (Math.random() - 0.5) * 1.0;
+        t.scale.set(isCrit ? 0.5 : 0.2);
+        const totalFrames = isCrit ? 70 : 90; // 暴击~1.2s，普通~1.5s
+        const fadeStart = isCrit ? 35 : 50;
         const tick = () => {
             if (!t.parent) return;
             elapsed++;
-            // 前半段轻微漂浮，后半段趋于静止（减少“飞走感”）
-            const drift = elapsed < 45 ? 1 : Math.max(0, 1 - (elapsed - 45) / 45);
+            const drift = elapsed < 20 ? 1 : Math.max(0, 1 - (elapsed - 20) / 20);
             t.x += vx * drift;
             t.y += vy * drift;
-            if (elapsed < 10) t.scale.set(0.2 + (elapsed / 10) * (isCrit ? 1.2 : 0.8));
-            if (isCrit) t.rotation = Math.sin(elapsed * 0.5) * 0.1;
+            if (elapsed < 8) t.scale.set((isCrit ? 0.5 : 0.2) + (elapsed / 8) * (isCrit ? 0.8 : 0.8));
             if (elapsed > fadeStart) t.alpha = 1 - (elapsed - fadeStart) / (totalFrames - fadeStart);
             if (elapsed < totalFrames) requestAnimationFrame(tick);
-            else this.renderLayer.removeChild(t);
+            else { if (t.parent) this.renderLayer.removeChild(t); }
         };
         tick();
     }

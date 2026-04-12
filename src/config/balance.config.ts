@@ -33,7 +33,7 @@ export const TALENT = {
     damagePerLevel: 0.1,        // 每级+10%伤害
     fireRatePerLevel: 0.05,     // 每级+5%射速
     goldBonusPerLevel: 0.2,     // 每级+20%金币
-    critChanceBase: 0.05,       // 基础暴击率5%
+    critChanceBase: 0.20,       // 基础暴击率20%
     critChancePerLevel: 0.05,   // 每级+5%暴击率
     critDamageMultiplier: 6.0,  // 暴击伤害倍率
 };
