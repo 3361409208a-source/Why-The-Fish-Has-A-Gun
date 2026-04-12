@@ -14,6 +14,7 @@ import { ResearchPage } from './ui/lobby/ResearchPage';
 import { MallPage } from './ui/lobby/MallPage';
 import { StagePage } from './ui/lobby/StagePage';
 import { SkillTreePage } from './ui/lobby/SkillTreePage';
+import { EndlessPage } from './ui/lobby/EndlessPage';
 import type { DialogueLine } from './config/dialogue.config';
 
 /**
@@ -169,6 +170,10 @@ export class UIManager {
                 if (this.currentOnStageSelected) {
                     StagePage.draw(this.mainPageContainer, this.currentOnStageSelected);
                 }
+                this.drawBackButton();
+                break;
+            case 'endless':
+                EndlessPage.draw(this.mainPageContainer, this.currentOnMapSelected);
                 this.drawBackButton();
                 break;
         }

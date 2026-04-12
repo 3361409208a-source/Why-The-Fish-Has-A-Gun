@@ -26,6 +26,8 @@ export class SaveManager {
         unlockedLayers: number[];
         /** 技能树解锁状态 { skillId: level } */
         skillTree: { [id: string]: number };
+        /** 无尽模式各难度最高分 { difficulty: bestScore } */
+        endlessScores: { [difficulty: string]: number };
     } = {
         gold: 1000,
         talents: {
@@ -44,6 +46,7 @@ export class SaveManager {
         unlockedLayerAreas: { '1': [1], '2': [1], '3': [1] },
         unlockedLayers: [1],
         skillTree: {},
+        endlessScores: {},
     };
 
     /**
@@ -93,6 +96,9 @@ export class SaveManager {
                 }
                 if (parsed.skillTree && typeof parsed.skillTree === 'object') {
                     Object.assign(this.state.skillTree, parsed.skillTree);
+                }
+                if (parsed.endlessScores && typeof parsed.endlessScores === 'object') {
+                    Object.assign(this.state.endlessScores, parsed.endlessScores);
                 }
                 // 向后兼容：旧存档 stageScores / unlockedStages 迁移到分层结构
                 if (parsed.stageScores && typeof parsed.stageScores === 'object') {

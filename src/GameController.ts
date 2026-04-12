@@ -136,8 +136,7 @@ export class GameController {
 
         // 确保UI层可见并显示HUD
         SceneManager.getLayer(Layers.UI).visible = true;
-        if (stageLevel > 0) {
-            // 显示战斗HUD
+        if (stageLevel > 0 || config.isEndless) {
             import('./UIManager').then(({ UIManager }) => {
                 UIManager.updateHUD(this.ctx.crystals);
                 import('./ui/battle/BattleHUD').then(({ BattleHUD }) => {
@@ -148,6 +147,8 @@ export class GameController {
 
         if (stageLevel > 0) {
             this.initStageEvents(app, stageLevel, onBack, currentLayer, currentArea);
+        } else if (config.isEndless) {
+            this.initEndlessEvents(config.endlessLevel ?? 1, onBack);
         }
 
         this.tickerFunc = (delta: number) => {
@@ -370,6 +371,25 @@ export class GameController {
         const origDestroy = this.destroy.bind(this);
         this.destroy = () => {
             cleanup();
+            origDestroy();
+        };
+    }
+
+    private initEndlessEvents(endlessLevel: number, onBack: (() => void) | undefined): void {
+        const saveScore = () => {
+            import('./SaveManager').then(({ SaveManager }) => {
+                const key = String(endlessLevel);
+                const prev = SaveManager.state.endlessScores[key] ?? 0;
+                if (this.ctx.stageScore > prev) {
+                    SaveManager.state.endlessScores[key] = this.ctx.stageScore;
+                    SaveManager.save();
+                }
+            });
+        };
+
+        const origDestroy = this.destroy.bind(this);
+        this.destroy = () => {
+            saveScore();
             origDestroy();
         };
     }

@@ -567,6 +567,7 @@ export class LobbyPage {
             { id: 'research', name: 'CORE TECH', icon: 'skin_lightning', desc: '升级研究中心' },
             { id: 'skilltree', name: 'SKILL TREE', icon: 'bullet_v2', desc: '武器技能树' },
             { id: 'mall', name: 'HERO MALL', icon: 'skin_railgun', desc: '英雄武器商店' },
+            { id: 'endless', name: '∞ ENDLESS', icon: 'cannon_v3', desc: '无尽模式挑战' },
         ];
 
         const W = SceneManager.width;
