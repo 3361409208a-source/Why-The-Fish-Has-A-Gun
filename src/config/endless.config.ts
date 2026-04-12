@@ -42,10 +42,10 @@ const BORDER_COLORS: number[] = [
 
 const BG_KEYS: string[] = [
     'bg_ocean', 'bg_ocean', 'bg_ocean', 'bg_ocean',
-    'bg_abyss', 'bg_abyss', 'bg_abyss', 'bg_abyss',
-    'bg_abyss', 'bg_abyss', 'bg_abyss', 'bg_abyss',
-    'bg_abyss', 'bg_abyss', 'bg_abyss', 'bg_abyss',
-    'bg_abyss', 'bg_abyss', 'bg_abyss', 'bg_abyss',
+    'bg_ocean', 'bg_ocean', 'bg_ocean', 'bg_ocean',
+    'bg_ocean', 'bg_ocean', 'bg_ocean', 'bg_ocean',
+    'bg_ocean', 'bg_ocean', 'bg_ocean', 'bg_ocean',
+    'bg_ocean', 'bg_ocean', 'bg_ocean', 'bg_ocean',
 ];
 
 /** 获取指定难度等级的配置（支持任意级数） */
