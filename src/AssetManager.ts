@@ -69,12 +69,14 @@ export class AssetManager {
 
         // 关键：将 assets/xxx.png 映射到 COS 根目录下的 xxx.png (剥离 assets/ 路径)
         const getPath = (p: string) => {
-            const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-            // 本地开发环境直接读取 public/assets（Vite: public 下资源以 / 开头访问最稳）
-            if (isLocal) return p.startsWith('/') ? p : `/${p}`;
-
+            // 如果是微信环境，继续使用远程
+            if (isWX) {
+                const fileName = p.split('/').pop() || p;
+                return REMOTE_BASE + fileName;
+            }
+            // H5 环境：【终极平面化】忽略代码中的所有路径前缀，强制在根目录查找
             const fileName = p.split('/').pop() || p;
-            return REMOTE_BASE + fileName;
+            return `./${fileName}`;
         };
 
         const assetsToLoad = {
@@ -130,50 +132,52 @@ export class AssetManager {
                     // 微信环境下，最稳妥的是手动 wx.createImage
                     tex = await new Promise<PIXI.Texture>((resolve, reject) => {
                         const img = (window as any).wx.createImage();
-                        // 超时保护：15秒加载失败则跳过
                         const timeoutId = (window as any).setTimeout(() => {
                             img.onload = null; img.onerror = null;
                             reject(new Error('Texture Load Timeout: ' + key));
                         }, 15000);
 
-                        // 兼容性修复：部分环境 tagName 只读，使用 defineProperty 强制注入
                         try {
-                            Object.defineProperty(img, 'tagName', {
-                                value: 'IMG',
-                                writable: true,
-                                configurable: true
-                            });
-                        } catch (e) {
-                            console.warn('AssetManager: Failed to inject tagName to WX image');
-                        }
+                            Object.defineProperty(img, 'tagName', { value: 'IMG', writable: true, configurable: true });
+                        } catch (e) { }
 
                         img.onload = () => {
                             (window as any).clearTimeout(timeoutId);
-                            // 使用刚在 main.ts 注册的全球探测器辅助，但也保持显式包装以防万一
                             const resource = new PIXI.ImageResource(img);
-                            const base = new PIXI.BaseTexture(resource, {
-                                alphaMode: PIXI.ALPHA_MODES.NO_PREMULTIPLIED_ALPHA,
-                                resolution: 1
-                            });
-                            const tex = new PIXI.Texture(base);
-
-                            // 双重注入缓存，显式设置名，解决 Texture.from 找不到的问题
-                            if (!PIXI.Cache.has(key)) {
-                                PIXI.Texture.addToCache(tex, key);
-                            }
-                            resolve(tex);
+                            const base = new PIXI.BaseTexture(resource, { alphaMode: PIXI.ALPHA_MODES.NO_PREMULTIPLIED_ALPHA, resolution: 1 });
+                            const t = new PIXI.Texture(base);
+                            if (!PIXI.Cache.has(key)) PIXI.Texture.addToCache(t, key);
+                            resolve(t);
                         };
                         img.onerror = reject;
                         img.src = finalPath;
                     });
                 } else {
-                    // 浏览器环境下使用 Texture.from
-                    tex = PIXI.Texture.from(finalPath);
-                    if (!tex.baseTexture.valid) {
-                        await new Promise((resolve) => {
-                            tex.baseTexture.once('loaded', resolve);
-                            tex.baseTexture.once('error', resolve);
-                        });
+                    // 浏览器环境下：双层探测逻辑
+                    let currentTex: PIXI.Texture;
+                    try {
+                        currentTex = PIXI.Texture.from(finalPath);
+                        if (!currentTex.baseTexture.valid) {
+                            await new Promise((resolve, reject) => {
+                                currentTex.baseTexture.once('loaded', () => resolve(currentTex));
+                                currentTex.baseTexture.once('error', async () => {
+                                    // 容错：如果 ./assets/xxx 报错，尝试直接找 ./xxx
+                                    const fileName = path.split('/').pop() || path;
+                                    const fallbackPath = `./${fileName}`;
+                                    console.warn(`[Asset] Retry loading "${key}" from fallback: ${fallbackPath}`);
+                                    const fallbackTex = PIXI.Texture.from(fallbackPath);
+                                    if (fallbackTex.baseTexture.valid) {
+                                        resolve(fallbackTex);
+                                    } else {
+                                        fallbackTex.baseTexture.once('loaded', () => resolve(fallbackTex));
+                                        fallbackTex.baseTexture.once('error', () => reject(new Error(`All paths failed for ${key}`)));
+                                    }
+                                });
+                            });
+                        }
+                        tex = currentTex;
+                    } catch (e) {
+                        throw e;
                     }
                 }
 
@@ -181,8 +185,8 @@ export class AssetManager {
                 PIXI.Texture.addToCache(tex, key);
                 loaded++;
                 if (onProgress) onProgress(loaded / total);
-            } catch (err) {
-                console.error(`AssetManager Error [${key}]:`, err);
+            } catch (err: any) {
+                console.error(`[CRITICAL] Asset "${key}" failed to load! URL: ${finalPath}`, err.message);
                 this.textures[key] = PIXI.Texture.WHITE;
                 loaded++;
                 if (onProgress) onProgress(loaded / total);

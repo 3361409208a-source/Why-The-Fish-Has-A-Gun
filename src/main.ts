@@ -2,10 +2,23 @@ import * as PIXI from 'pixi.js';
 import '@pixi/unsafe-eval';
 
 // 强制跳过渲染检测与适配微信环境
+console.log('PIXI Game Initializing on Web Platform...');
 PIXI.settings.PREFER_ENV = PIXI.ENV.WEBGL_LEGACY;
 PIXI.BaseTexture.defaultOptions.alphaMode = PIXI.ALPHA_MODES.NO_PREMULTIPLIED_ALPHA;
-(PIXI.settings as any).FAIL_IF_MAJOR_PERFORMANCE_CAVEAT = false; // 微信端有时会触发这个导致初始化失败
-(PIXI.settings as any).CREATE_IMAGE_BITMAP = false; // 微信端不支持 ImageBitmap 加载方式，必须禁用
+if (typeof (window as any).wx === 'undefined') {
+    (PIXI.settings as any).FAIL_IF_MAJOR_PERFORMANCE_CAVEAT = false;
+    (PIXI.settings as any).CREATE_IMAGE_BITMAP = true; // 浏览器环境下开启以提升性能
+    
+    // [核弹级修复]：在浏览器环境强制屏蔽可能导致崩溃的屏幕锁定 API
+    try {
+        if (typeof screen !== 'undefined' && (screen as any).orientation) {
+            (screen as any).orientation.lock = () => Promise.resolve();
+            console.log('Screen orientation lock disabled for compatibility.');
+        }
+    } catch (e) { }
+} else {
+    (PIXI.settings as any).CREATE_IMAGE_BITMAP = false; // 微信端不支持
+}
 
 // 3. [纠极修复]：直接修正 PIXI 资源探测器的静态测试方法
 // 这比注册 Extension 更稳健，能彻底解决 "Unrecognized source type" 报错
@@ -283,13 +296,19 @@ const initGame = async () => {
 
     // 初始设置背景
     SceneManager.setBackground('bg_ocean');
+    
+    // 强制手动渲染第一帧，防止部分浏览器黑屏
+    app.renderer.render(app.stage);
 
     console.log('Game Started with Global Upgrades');
 };
 
-// 延迟启动，避免阻塞微信主线程初始化
-(window as any).setTimeout(() => {
+// 延迟启动，确保 DOM 就绪
+window.addEventListener('DOMContentLoaded', () => {
+    console.log('===== PIXI STARTING =====');
     initGame().catch(err => {
+        // 作为最后的手段，如果黑屏且控制台看不到报错，直接弹窗显示
+        alert('Game Init Error: ' + err.message);
         console.error('Game Init Error:', err);
     });
-}, 50);
+});

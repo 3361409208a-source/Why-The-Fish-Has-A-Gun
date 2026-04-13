@@ -5,22 +5,21 @@ export default defineConfig(({ mode }) => {
   const isWechat = mode === 'wechat';
 
   return {
+    base: './',
     build: {
-      lib: isWechat ? {
+      lib: {
         entry: resolve(__dirname, 'src/main.ts'),
         name: 'GameLogic',
         formats: ['iife'],
         fileName: () => 'game.bundle.js',
-      } : undefined,
+      },
       outDir: isWechat ? 'dist_wechat' : 'dist',
       emptyOutDir: true,
-      rollupOptions: isWechat ? {
+      rollupOptions: {
         output: {
           extend: true,
-        },
-      } : {
-        input: {
-          main: resolve(__dirname, 'index.html'),
+          // 确保所有资源都在根目录 flat 部署，减少路径层级问题
+          assetFileNames: '[name][extname]'
         },
       },
     },
