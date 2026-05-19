@@ -49,12 +49,18 @@ export class UIManager {
         const uiLayer = SceneManager.getLayer(Layers.UI);
 
         this.menuContainer = new PIXI.Container();
+        this.menuContainer.eventMode = 'passive';
+        this.menuContainer.interactiveChildren = true;
         uiLayer.addChild(this.menuContainer);
 
         this.mainPageContainer = new PIXI.Container();
+        this.mainPageContainer.eventMode = 'passive';
+        this.mainPageContainer.interactiveChildren = true;
         this.menuContainer.addChild(this.mainPageContainer);
 
         this.navContainer = new PIXI.Container();
+        this.navContainer.eventMode = 'passive';
+        this.navContainer.interactiveChildren = true;
         this.menuContainer.addChild(this.navContainer);
 
         BattleHUD.init(uiLayer);

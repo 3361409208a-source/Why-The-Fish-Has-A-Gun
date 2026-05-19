@@ -54,6 +54,7 @@ import { getDialogue } from './config/dialogue.config';
 import { getMap } from './config/maps.config';
 import { LEVELS, getLevelLocation, getLayerAreaLevels } from './config/levels.config';
 import { talentManager } from './core/TalentManager';
+import { bindWxPixiTouch } from './WxPixiTouch';
 
 /**
  * 游戏入口：深海余烬 (全屏独立页面架构)
@@ -80,28 +81,37 @@ const initGame = async () => {
 
     // 微信真机修复：用实际游戏 canvas 替换 PIXI 内部 WebGL 探测逻辑
     // (真机上 document.createElement('canvas') 创建的第二个 canvas 不支持 WebGL)
-    if (isWX) {
-        try {
-            const utils = (PIXI as any).utils;
-            if (utils && typeof utils.isWebGLSupported === 'function') {
-                utils.isWebGLSupported = () => {
-                    try { return !!(canvas.getContext('webgl') || (canvas as any).getContext('experimental-webgl')); }
-                    catch (e) { return false; }
-                };
-            }
-        } catch (e) { console.warn('PIXI patch failed:', e); }
-    }
-
-    const app = new PIXI.Application({
-        view: canvas,
+    const rendererOptions = {
+        view: canvas as HTMLCanvasElement,
         width: window.innerWidth,
         height: window.innerHeight,
-        resolution: Math.max(window.devicePixelRatio || 1, 2), // 提升保底分辨率，增加画质
+        resolution: Math.max(window.devicePixelRatio || 1, 2),
         autoDensity: true,
-        backgroundAlpha: isWX ? 1 : 0, // 微信端使用实心背景，浏览器端透明以支持视频
-        backgroundColor: 0x00050a,     // 深海底色
-        antialias: true, // 开启抗锯齿，大幅提升模型和特效边缘清晰度
-    });
+        backgroundAlpha: isWX ? 1 : 0,
+        backgroundColor: 0x00050a,
+        antialias: true,
+    };
+
+    let app: PIXI.Application;
+    if (isWX) {
+        // 微信：isWebGLSupported 是只读 ES Module binding 无法 patch，
+        // 直接构造 PIXI.Renderer 完全跳过 autoDetectRenderer 检测
+        const renderer = new (PIXI as any).Renderer(rendererOptions) as PIXI.Renderer;
+        const stage = new PIXI.Container();
+        // 手动创建 Renderer 时须绑定事件根节点，否则 FederatedEvents 无法命中 UI
+        const events = (renderer as any).events;
+        if (events?.rootBoundary) {
+            events.rootBoundary.rootTarget = stage;
+        }
+        const ticker = new PIXI.Ticker();
+        ticker.add(() => renderer.render(stage));
+        ticker.start();
+        app = { renderer, stage, ticker, view: canvas, screen: renderer.screen } as any as PIXI.Application;
+        bindWxPixiTouch(app, stage);
+        console.log('WeChat: PIXI.Renderer created directly, bypassing autoDetect');
+    } else {
+        app = new PIXI.Application(rendererOptions);
+    }
 
     // body 默认深海色（普通地图的底色）
     if (typeof document !== 'undefined' && document.body && document.body.style) {
@@ -176,7 +186,7 @@ const initGame = async () => {
         UIManager.hideAll();
 
         // 渲染器清理（防止视频残留）
-        const video = document.getElementById('bg-video');
+        const video = typeof document !== 'undefined' && typeof (document as any).getElementById === 'function' ? document.getElementById('bg-video') : null;
         if (video) video.remove();
         if (isWX && (window as any)._wxVideo) {
             (window as any)._wxVideo.destroy();
@@ -252,7 +262,7 @@ const initGame = async () => {
         if (activeController) { activeController.destroy(); activeController = null; }
         UIManager.hideAll();
 
-        const video = document.getElementById('bg-video');
+        const video = typeof document !== 'undefined' && typeof (document as any).getElementById === 'function' ? document.getElementById('bg-video') : null;
         if (video) video.remove();
 
         const mapDef = getMap(lvlDef.bgKey);
@@ -304,11 +314,19 @@ const initGame = async () => {
 };
 
 // 延迟启动，确保 DOM 就绪
-window.addEventListener('DOMContentLoaded', () => {
-    console.log('===== PIXI STARTING =====');
+// 微信小游戏无 DOMContentLoaded 事件，直接启动；浏览器端监听事件
+if (typeof (window as any).wx !== 'undefined') {
+    console.log('===== PIXI STARTING (WeChat) =====');
     initGame().catch(err => {
-        // 作为最后的手段，如果黑屏且控制台看不到报错，直接弹窗显示
-        alert('Game Init Error: ' + err.message);
         console.error('Game Init Error:', err);
     });
-});
+} else {
+    window.addEventListener('DOMContentLoaded', () => {
+        console.log('===== PIXI STARTING =====');
+        initGame().catch(err => {
+            // 作为最后的手段，如果黑屏且控制台看不到报错，直接弹窗显示
+            alert('Game Init Error: ' + err.message);
+            console.error('Game Init Error:', err);
+        });
+    });
+}

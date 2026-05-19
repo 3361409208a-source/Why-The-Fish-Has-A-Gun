@@ -434,7 +434,8 @@ export class GameController {
         this.ctx.app.stage.off('pointerdown');
         this.ctx.app.stage.off('pointerup');
         this.ctx.app.stage.off('pointermove');
-        if (this.ctx.app.stage.hitArea) this.ctx.app.stage.hitArea = null;
+        this.ctx.app.stage.hitArea = null;
+        this.ctx.app.stage.eventMode = 'passive';
 
         [...this.ctx.fishes, ...this.ctx.bullets, ...this.ctx.cores,
         ...this.ctx.particles, ...this.ctx.shockwaves, ...this.ctx.lightnings].forEach(e => {

@@ -6,6 +6,8 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: './',
+    // 微信模式：不复制 public/ 目录，避免 assets 出现在 dist_wechat 中
+    publicDir: isWechat ? false : 'public',
     build: {
       lib: {
         entry: resolve(__dirname, 'src/main.ts'),

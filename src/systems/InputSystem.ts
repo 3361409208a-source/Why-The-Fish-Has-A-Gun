@@ -14,7 +14,9 @@ export class InputSystem {
     ) {}
 
     init(): void {
+        // 仅战斗态拦截舞台空白区域；勿在 lobby 占用 stage 命中
         this.app.stage.eventMode = 'static';
+        this.app.stage.interactiveChildren = true;
         this.app.stage.hitArea = new PIXI.Rectangle(-1000, -1000, 3000, 3000);
 
         const onMove = (e: PIXI.FederatedPointerEvent) => {
@@ -48,30 +50,6 @@ export class InputSystem {
             if (this.isDragging || e.buttons > 0 || e.pointerType === 'touch') onMove(e);
         });
 
-        if (typeof (window as any).wx !== 'undefined' && typeof (window as any).wx.onTouchMove === 'function') {
-            const wx = (window as any).wx;
-            wx.onTouchStart((res: any) => {
-                if (this.isPaused()) return;
-                AssetManager.unlockAudio();
-                this.isDragging = true;
-                if (res.touches?.length > 0) {
-                    const t = res.touches[0];
-                    this.cannon.lookAt(
-                        this.app.stage.toLocal(new PIXI.Point(t.clientX, t.clientY)).x,
-                        this.app.stage.toLocal(new PIXI.Point(t.clientX, t.clientY)).y
-                    );
-                }
-            });
-            wx.onTouchMove((res: any) => {
-                if (this.isPaused() || !this.isDragging) return;
-                if (res.touches?.length > 0) {
-                    const t = res.touches[0];
-                    const pos = this.app.stage.toLocal(new PIXI.Point(t.clientX, t.clientY));
-                    this.cannon.lookAt(pos.x, pos.y);
-                }
-            });
-            wx.onTouchEnd(() => { this.isDragging = false; if (this.ctx) this.ctx.isManualAiming = false; });
-            wx.onTouchCancel(() => { this.isDragging = false; if (this.ctx) this.ctx.isManualAiming = false; });
-        }
+        // 微信端触摸由 WxPixiTouch → Federated 事件驱动，与 UI 共用 stage 的 pointer 事件
     }
 }
