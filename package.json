@@ -5,6 +5,7 @@
   "main": "game.js",
   "scripts": {
     "dev": "vite",
+    "build": "npm run build:h5",
     "build:h5": "vite build",
     "build:wechat": "vite build --mode wechat && node scripts/sync-wechat.mjs && powershell -Command \"Remove-Item -Path dist_wechat/assets -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item -Path dist_wechat/*.png -Force -ErrorAction SilentlyContinue\"",
     "preview": "vite preview"
