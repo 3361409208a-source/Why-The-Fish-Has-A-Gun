@@ -9,26 +9,31 @@
     var g = typeof GameGlobal !== 'undefined' ? GameGlobal
         : (typeof globalThis !== 'undefined' ? globalThis : null);
     if (!g || typeof wx === 'undefined') return;
+    g.__BUILD_TARGET__ = 'wechat';
     var names = ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', 'cancelAnimationFrame'];
     for (var i = 0; i < names.length; i++) {
         var n = names[i];
-        if (typeof g[n] !== 'function' && typeof wx[n] === 'function') {
-            var fn = wx[n].bind(wx);
-            g[n] = fn;
-            if (typeof globalThis !== 'undefined') globalThis[n] = fn;
-            if (typeof global !== 'undefined') global[n] = fn;
-            if (typeof window !== 'undefined') window[n] = fn;
-        }
+        var fn = typeof g[n] === 'function' ? g[n] : (typeof wx[n] === 'function' ? wx[n].bind(wx) : null);
+        if (!fn) continue;
+        g[n] = fn;
+        try { globalThis[n] = fn; } catch (e) {}
+        try { if (typeof global !== 'undefined') global[n] = fn; } catch (e) {}
+        try { if (typeof window !== 'undefined') window[n] = fn; } catch (e) {}
     }
     g.__wxTimerReady = true;
 })();
 
+GameGlobal.__WECHAT_BOOT_TAG__ = '2026-05-20-r3';
+console.log('===== WECHAT BOOT ' + GameGlobal.__WECHAT_BOOT_TAG__ + ' =====');
 console.log('===== ANTIGRAVITY TIMERS INJECTED V3.0 (3.16 compat) =====');
 
 try {
     var sys = wx.getSystemInfoSync();
     GameGlobal.__wxSystemInfo = sys;
     console.log('[Boot] WeChat SDKVersion:', sys.SDKVersion || 'unknown');
+    if (sys.SDKVersion && parseFloat(sys.SDKVersion) >= 3.13) {
+        console.warn('[Boot] 基础库>=3.13 可能先报 setTimeout 红字，若随后有 Lobby UI ready 可忽略；卡顿请用 3.11.3 调试基础库');
+    }
 } catch (e) {}
 
 if (typeof Intl === 'undefined') {

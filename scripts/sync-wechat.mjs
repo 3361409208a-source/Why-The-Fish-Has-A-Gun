@@ -34,8 +34,17 @@ for (const name of copyToDist) {
 // 同步到项目根，避免在根目录打开工具时缺 bundle
 fs.copyFileSync(path.join(dist, 'game.bundle.js'), path.join(root, 'game.bundle.js'));
 
+const bundlePath = path.join(dist, 'game.bundle.js');
+const bundleKb = (fs.statSync(bundlePath).size / 1024).toFixed(1);
+const bootTag = '2026-05-20-r3';
+
 console.log('');
 console.log('微信小游戏包已就绪: dist_wechat/');
-console.log('请在微信开发者工具中【导入项目】并选择该文件夹（不要选上一级 src 目录）');
+console.log(`  game.bundle.js = ${bundleKb} KB`);
+console.log(`  启动后 vConsole 必须看到: WECHAT BOOT ${bootTag}`);
+console.log('  若仍是 Fallback applied / Renderer created directly → 未用到本包，请清缓存');
+console.log('');
+console.log('【重要】微信开发者工具 → 导入项目 → 只选 dist_wechat 文件夹');
+console.log('【重要】详情 → 本地设置 → 调试基础库 → 选 3.11.3（勿用 3.16，否则 setTimeout 红字）');
 console.log('必需文件: game.js, game.bundle.js, game.json, weapp-adapter.js');
 console.log('');

@@ -13,9 +13,21 @@ export class AssetManager {
     private static soundEndTimes: { [key: string]: number } = {};
     private static soundNextAllowedAt: { [key: string]: number } = {};
     private static audioUnlocked: boolean = false;
-    private static readonly IS_WECHAT = import.meta.env.MODE === 'wechat';
-    /** 贴图最长边上限（微信真机防 OOM，H5 略宽松） */
-    private static readonly MAX_TEX_EDGE = import.meta.env.MODE === 'wechat' ? 1024 : 2048;
+    private static readonly IS_WECHAT_BUILD = import.meta.env.MODE === 'wechat';
+
+    /** 编译 + 运行时双判断，防止用 H5 包在微信里跑 */
+    private static isWechatEnv(): boolean {
+        const g = globalThis as any;
+        return this.IS_WECHAT_BUILD
+            || g.__BUILD_TARGET__ === 'wechat'
+            || typeof g.wx !== 'undefined'
+            || typeof g.GameGlobal?.wx !== 'undefined';
+    }
+
+    private static maxTexEdge(key: string): number {
+        if (!this.isWechatEnv()) return 2048;
+        return key === 'bg_ocean' ? 960 : 512;
+    }
     private static readonly loadingKeys = new Set<string>();
 
     /** 启动必载：大厅 + 基础战斗 */
@@ -104,7 +116,7 @@ export class AssetManager {
 
     /** 浏览器 Web Audio；微信小游戏无 AudioContext，走 wx.createInnerAudioContext */
     private static initWebAudio(): void {
-        if (this.IS_WECHAT || this.audioCtx) return;
+        if (this.isWechatEnv() || this.audioCtx) return;
         const AC = window.AudioContext || (window as any).webkitAudioContext;
         if (typeof AC !== 'function') return;
         try {
@@ -135,7 +147,7 @@ export class AssetManager {
             'lightning': 'https://yu-1330371299.cos.ap-guangzhou.myqcloud.com/dianjijizhong.mp3',
         };
 
-        if (this.IS_WECHAT) {
+        if (this.isWechatEnv()) {
             const wx = (window as any).wx;
             if (typeof wx?.createInnerAudioContext !== 'function') return;
             for (const [key, url] of Object.entries(soundMap)) {
@@ -164,19 +176,10 @@ export class AssetManager {
     }
 
     private static async loadExternalAssets(onProgress?: (p: number) => void): Promise<void> {
-        // 编译时常量：微信模式用 COS，H5 模式用本地路径
-        // 使用 import.meta.env.MODE 而非运行时 isWX，让 Rollup DCE 消除死代码
-        const IS_WECHAT_BUILD = import.meta.env.MODE === 'wechat';
-        const REMOTE_BASE = "https://yu-1330371299.cos.ap-guangzhou.myqcloud.com/";
+        const wxEnv = this.isWechatEnv();
+        console.log(`[Asset] env: build=${import.meta.env.MODE}, wechatRuntime=${wxEnv}`);
 
-        const getPath = (p: string) => {
-            if (IS_WECHAT_BUILD) {
-                return REMOTE_BASE + p;
-            }
-            return "./assets/" + p;
-        };
-
-        const assetsToLoad = IS_WECHAT_BUILD
+        const assetsToLoad = wxEnv
             ? { ...this.CORE_ASSETS }
             : { ...this.CORE_ASSETS, ...this.LAZY_ASSETS };
 
@@ -198,22 +201,25 @@ export class AssetManager {
     }
 
     private static logTextureMemory(tag: string): void {
+        const seen = new Set<number>();
         let px = 0;
-        let n = 0;
         for (const t of Object.values(this.textures)) {
             if (!t?.baseTexture?.valid) continue;
+            const uid = (t.baseTexture as any).uid ?? (t.baseTexture as any).textureCacheIds?.[0];
+            if (uid != null && seen.has(uid)) continue;
+            if (uid != null) seen.add(uid);
             const w = t.width || 0;
             const h = t.height || 0;
             if (w <= 0 || h <= 0) continue;
             px += w * h;
-            n++;
         }
         const mb = ((px * 4) / (1024 * 1024)).toFixed(1);
-        console.log(`[Asset] ${tag}: ${n} textures, ~${mb}MB RGBA (估算)`);
+        const keys = Object.keys(this.textures).length;
+        console.log(`[Asset] ${tag}: ${seen.size || keys} 张唯一贴图, ${keys} 个逻辑键, ~${mb}MB RGBA`);
     }
 
-    private static downscaleImageSource(img: { width: number; height: number }): HTMLCanvasElement | typeof img {
-        const maxEdge = this.MAX_TEX_EDGE;
+    private static downscaleImageSource(img: { width: number; height: number }, key: string): HTMLCanvasElement | typeof img {
+        const maxEdge = this.maxTexEdge(key);
         const iw = img.width;
         const ih = img.height;
         if (Math.max(iw, ih) <= maxEdge) return img as HTMLCanvasElement;
@@ -241,7 +247,7 @@ export class AssetManager {
     }
 
     private static textureFromImage(img: { width: number; height: number }, key: string): PIXI.Texture {
-        const source = this.downscaleImageSource(img);
+        const source = this.downscaleImageSource(img, key);
         const resource = new PIXI.ImageResource(source as any);
         const base = new PIXI.BaseTexture(resource, {
             alphaMode: PIXI.ALPHA_MODES.NO_PREMULTIPLIED_ALPHA,
@@ -256,9 +262,9 @@ export class AssetManager {
         assetsToLoad: Record<string, string>,
         onProgress?: (p: number) => void
     ): Promise<void> {
-        const IS_WECHAT_BUILD = import.meta.env.MODE === 'wechat';
+        const wxEnv = this.isWechatEnv();
         const REMOTE_BASE = 'https://yu-1330371299.cos.ap-guangzhou.myqcloud.com/';
-        const getPath = (p: string) => (IS_WECHAT_BUILD ? REMOTE_BASE + p : './assets/' + p);
+        const getPath = (p: string) => (wxEnv ? REMOTE_BASE + p : './assets/' + p);
 
         const total = Object.keys(assetsToLoad).length;
         let loaded = 0;
@@ -270,7 +276,7 @@ export class AssetManager {
             try {
                 let tex: PIXI.Texture;
 
-                if (IS_WECHAT_BUILD) {
+                if (wxEnv) {
                     // 微信环境下，最稳妥的是手动 wx.createImage
                     tex = await new Promise<PIXI.Texture>((resolve, reject) => {
                         const img = (window as any).wx.createImage();
@@ -346,7 +352,9 @@ export class AssetManager {
             if (needFallback && alt && alt !== PIXI.Texture.WHITE && alt.baseTexture?.valid) {
                 this.textures[key] = alt;
                 if (!PIXI.Cache.has(key)) PIXI.Texture.addToCache(alt, key);
-                console.log(`[Asset] Fallback applied: ${key} <- ${fallbackKey}`);
+                if (!this.isWechatEnv() || this.textures[fallbackKey]?.baseTexture?.valid) {
+                    console.log(`[Asset] Fallback alias: ${key} <- ${fallbackKey}`);
+                }
             }
         }
     }
@@ -389,7 +397,7 @@ export class AssetManager {
     }
 
     public static playSound(type: string, rate: number = 1, duration?: number, noOverlap: boolean = false): void {
-        if (this.IS_WECHAT) {
+        if (this.isWechatEnv()) {
             this.playWxSound(type, rate, noOverlap);
             return;
         }
@@ -473,7 +481,7 @@ export class AssetManager {
     public static unlockAudio(): void {
         if (this.audioUnlocked) return;
         this.audioUnlocked = true;
-        if (this.IS_WECHAT) return;
+        if (this.isWechatEnv()) return;
         if (!this.audioCtx) return;
         try {
             if (this.audioCtx.state === 'suspended') this.audioCtx.resume();

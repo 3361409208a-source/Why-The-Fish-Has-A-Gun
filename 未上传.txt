@@ -1,0 +1,20 @@
+未上传的图片资源列表：
+
+1. boss_leviathan.png
+2. boss_whale.png
+3. boss_crab.png
+4. boss_manta.png
+5. boss_titan_whale.png
+6. boss_titan_serpent.png
+7. boss_titan_shark.png
+8. boss_titan_dragon.png
+9. boss_gg.png
+10. fish_cyber_shark.png
+11. fish_bio_piranha.png
+12. fish_tech_angler.png
+13. fish_railgun_swordfish.png
+14. fish_cyber_salmon.png
+15. fish_bio_pufferfish.png
+16. fish_armored_barracuda.png
+17. fish_cyber_tetra.png
+18. fish_scifi_stingray.png

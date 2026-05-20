@@ -96,7 +96,7 @@ const initGame = async () => {
     let viewH = sys?.screenHeight ?? sys?.windowHeight ?? window.innerHeight;
     if (viewH > viewW) { const t = viewW; viewW = viewH; viewH = t; }
     const wxDpr = sys?.pixelRatio ?? window.devicePixelRatio ?? 1;
-    const rendererDpr = isWX ? Math.min(wxDpr, 1.5) : Math.min(wxDpr, 2);
+    const rendererDpr = isWX ? 1 : Math.min(wxDpr, 2);
 
     if (isWX) {
         applyWxTextDefaults();
@@ -130,7 +130,7 @@ const initGame = async () => {
         ticker.start();
         app = { renderer, stage, ticker, view: canvas, screen: renderer.screen } as any as PIXI.Application;
         bindWxPixiTouch(app, stage);
-        console.log(`WeChat: Renderer ${viewW}x${viewH} dpr=${wxDpr}`);
+        console.log(`WeChat: Renderer ${viewW}x${viewH} resolution=${rendererDpr} (device dpr=${wxDpr})`);
     } else {
         app = new PIXI.Application(rendererOptions);
     }
