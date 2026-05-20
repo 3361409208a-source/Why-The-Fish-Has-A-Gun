@@ -1,5 +1,6 @@
 import * as PIXI from 'pixi.js';
 import { SceneManager } from '../../SceneManager';
+import { wxTextStyle } from '../../utils/wxFont';
 
 export class BattleHUD {
     private static scoreText: PIXI.Text;
@@ -10,9 +11,9 @@ export class BattleHUD {
     private static stageProgressBar: PIXI.Graphics;
 
     public static init(layer: PIXI.Container): void {
-        this.scoreText = new PIXI.Text('晶体: 0', {
+        this.scoreText = new PIXI.Text('晶体: 0', wxTextStyle({
             fontSize: 28, fill: 0xffcc00, fontWeight: 'bold'
-        });
+        }));
         this.scoreText.x = 20; this.scoreText.y = 20;
         this.scoreText.visible = false;
         layer.addChild(this.scoreText);
@@ -23,17 +24,17 @@ export class BattleHUD {
         this.berserkBar.visible = false;
         layer.addChild(this.berserkBar);
 
-        this.berserkText = new PIXI.Text('BERSERK: 0%', {
+        this.berserkText = new PIXI.Text('BERSERK: 0%', wxTextStyle({
             fontSize: 14, fill: 0x00f0ff, fontWeight: 'bold'
-        });
+        }));
         this.berserkText.x = 20; this.berserkText.y = 85;
         this.berserkText.visible = false;
         layer.addChild(this.berserkText);
 
         // 关卡分数显示（仅在关卡模式显示）
-        this.stageScoreText = new PIXI.Text('关卡分数: 0', {
+        this.stageScoreText = new PIXI.Text('关卡分数: 0', wxTextStyle({
             fontSize: 18, fill: 0x00e5ff, fontWeight: 'bold'
-        });
+        }));
         this.stageScoreText.x = SceneManager.width / 2;
         this.stageScoreText.y = 20;
         this.stageScoreText.anchor.set(0.5, 0);

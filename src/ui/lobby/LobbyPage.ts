@@ -37,11 +37,20 @@ export class LobbyPage {
         onSwitchPage: (id: string) => void
     ): void {
         const W = SceneManager.width;
-        const cardW = 320;
-        const cardH = 400;
-        const gap = 30;
-        const totalW = 3 * cardW + 2 * gap;
-        const startX = (W - totalW - 300) / 2; // 右侧留给nav
+        const navReserve = 300;
+        const maxContentW = W - navReserve - 48;
+        let cardW = 320;
+        let cardH = 400;
+        let gap = 30;
+        let totalW = 3 * cardW + 2 * gap;
+        if (totalW > maxContentW) {
+            const shrink = maxContentW / totalW;
+            cardW = Math.floor(cardW * shrink);
+            cardH = Math.floor(cardH * shrink);
+            gap = Math.max(12, Math.floor(gap * shrink));
+            totalW = 3 * cardW + 2 * gap;
+        }
+        const startX = Math.max(24, (maxContentW - totalW) / 2 + 24);
         const startY = 120;
 
         // 确定3个显示的区域：始终包含区域1，然后是当前、下一区域
@@ -87,7 +96,7 @@ export class LobbyPage {
             });
 
             const x = startX + i * (cardW + gap);
-            const card = this.createAreaCard(areaNum, isUnlocked, isCurrent, areaProgress, totalLevels, () => {
+            const card = this.createAreaCard(areaNum, isUnlocked, isCurrent, areaProgress, totalLevels, cardW, cardH, () => {
                 if (!isUnlocked) {
                     FloatingText.show(SceneManager.width / 2, 200, '该区域尚未解锁！', 0xff0000);
                     return;
@@ -110,11 +119,11 @@ export class LobbyPage {
         isCurrent: boolean,
         progress: number,
         total: number,
+        cardW: number,
+        cardH: number,
         onEnter: () => void
     ): PIXI.Container {
         const card = new PIXI.Container();
-        const cardW = 320;
-        const cardH = 400;
         const borderColor = isCurrent ? 0x00e5ff : (isUnlocked ? 0x4a6fa5 : 0x333333);
         const alpha = isUnlocked ? 1.0 : 0.5;
 
@@ -243,6 +252,7 @@ export class LobbyPage {
             btnTxt.anchor.set(0.5); btnTxt.x = cardW / 2; btnTxt.y = btnY + 27;
             card.addChild(btnBg, btnTxt);
             card.eventMode = 'static'; card.cursor = 'pointer';
+            card.hitArea = new PIXI.Rectangle(0, 0, cardW, cardH);
             card.on('pointerover', () => { bg.tint = 0x223344; card.scale.set(1.02); });
             card.on('pointerout', () => { bg.tint = 0xffffff; card.scale.set(1); });
             card.on('pointerdown', onEnter);
@@ -299,6 +309,7 @@ export class LobbyPage {
             if (isUnlocked) {
                 btn.eventMode = 'static';
                 btn.cursor = isActive ? 'default' : 'pointer';
+                btn.hitArea = new PIXI.Rectangle(0, 0, btnW, btnH);
                 if (!isActive) {
                     btn.on('pointerover', () => { bg.tint = 0x333333; });
                     btn.on('pointerout', () => { bg.tint = 0xffffff; });
@@ -379,6 +390,7 @@ export class LobbyPage {
             if (isUnlocked) {
                 btn.eventMode = 'static';
                 btn.cursor = isActive ? 'default' : 'pointer';
+                btn.hitArea = new PIXI.Rectangle(0, 0, btnW, btnH);
                 if (!isActive) {
                     btn.on('pointerover', () => { bg.tint = 0x333333; });
                     btn.on('pointerout', () => { bg.tint = 0xffffff; });
@@ -544,6 +556,7 @@ export class LobbyPage {
             btnTxt.anchor.set(0.5); btnTxt.x = cardW / 2; btnTxt.y = cardH - 29;
             card.addChild(btnBg, btnTxt);
             card.eventMode = 'static'; card.cursor = 'pointer';
+            card.hitArea = new PIXI.Rectangle(0, 0, cardW, cardH);
             card.on('pointerover', () => { bg.tint = 0x223344; card.scale.set(1.03); });
             card.on('pointerout', () => { bg.tint = 0xffffff; card.scale.set(1); });
             card.on('pointerdown', onEnter);
@@ -571,7 +584,9 @@ export class LobbyPage {
         ];
 
         const W = SceneManager.width;
-        nav.x = W - 310; nav.y = 120;
+        const navW = 280;
+        nav.x = W - navW - 24;
+        nav.y = 120;
 
         tabs.forEach((tab, i) => {
             const tabBtn = new PIXI.Container();
@@ -613,6 +628,7 @@ export class LobbyPage {
 
             tabBtn.addChild(bg, txt, desc);
             tabBtn.eventMode = 'static'; tabBtn.cursor = 'pointer';
+            tabBtn.hitArea = new PIXI.Rectangle(0, 0, bw, bh);
             tabBtn.on('pointerover', () => {
                 bg.tint = 0x1a3a5a;
                 highlight.tint = 0x2a4a6a;

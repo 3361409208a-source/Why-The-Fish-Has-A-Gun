@@ -1,4 +1,5 @@
 import { SceneManager, Layers } from '../SceneManager';
+import { wxTimer } from '../utils/wxTimer';
 import { Fish } from '../entities/Fish';
 import { NanoCore } from '../entities/NanoCore';
 import { ECONOMY } from '../config/balance.config';
@@ -30,7 +31,7 @@ export class SpawnSystem {
             const swarmCount = Math.floor(Math.random() * maxSwarm) + 2;
             const baseSpawnY = 100 + Math.random() * (SceneManager.height - 300);
             for (let i = 0; i < swarmCount; i++) {
-                setTimeout(() => {
+                wxTimer.setTimeout(() => {
                     if (this.ctx.fishes.length < 120) {
                         this.spawnFish(baseSpawnY + (Math.random() - 0.5) * 80);
                     }

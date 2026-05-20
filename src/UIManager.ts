@@ -16,6 +16,8 @@ import { StagePage } from './ui/lobby/StagePage';
 import { SkillTreePage } from './ui/lobby/SkillTreePage';
 import { EndlessPage } from './ui/lobby/EndlessPage';
 import type { DialogueLine } from './config/dialogue.config';
+import { wxTextStyle } from './utils/wxFont';
+import { AssetManager } from './AssetManager';
 
 /**
  * UIManager — 路由协调层
@@ -49,8 +51,10 @@ export class UIManager {
         const uiLayer = SceneManager.getLayer(Layers.UI);
 
         this.menuContainer = new PIXI.Container();
-        this.menuContainer.eventMode = 'passive';
+        this.menuContainer.eventMode = 'static';
         this.menuContainer.interactiveChildren = true;
+        this.menuContainer.zIndex = 10;
+        uiLayer.sortableChildren = true;
         uiLayer.addChild(this.menuContainer);
 
         this.mainPageContainer = new PIXI.Container();
@@ -63,16 +67,21 @@ export class UIManager {
         this.navContainer.interactiveChildren = true;
         this.menuContainer.addChild(this.navContainer);
 
-        BattleHUD.init(uiLayer);
-        ComboDisplay.init(uiLayer);
-        WeaponShopPanel.init(uiLayer);
-        FloatingText.init(uiLayer);
-
+        // 必须先画大厅：BattleHUD 等若 PIXI.Text 在微信上报错，会阻断 showMapSelection
         this.showMapSelection(onMapSelected);
+
+        const safeInit = (name: string, fn: () => void) => {
+            try { fn(); } catch (e) { console.error(`[UIManager] ${name} init failed`, e); }
+        };
+        safeInit('BattleHUD', () => BattleHUD.init(uiLayer));
+        safeInit('ComboDisplay', () => ComboDisplay.init(uiLayer));
+        safeInit('WeaponShopPanel', () => WeaponShopPanel.init(uiLayer));
+        safeInit('FloatingText', () => FloatingText.init(uiLayer));
     }
 
     public static hideAll(): void {
         if (this.menuContainer) this.menuContainer.visible = false;
+        if (this.lobbyBackdrop) this.lobbyBackdrop.visible = false;
         WeaponShopPanel.hide();
         BattleHUD.hide();
         ComboDisplay.hide();
@@ -132,10 +141,25 @@ export class UIManager {
         );
     }
 
+    private static lobbyBackdrop: PIXI.Graphics | null = null;
+
     public static showMapSelection(onSelected: (config: any) => void): void {
         this.currentOnMapSelected = onSelected;
         this.menuContainer.visible = true;
         WeaponShopPanel.hide();
+        BattleHUD.hide();
+        ComboDisplay.hide();
+
+        if (!this.lobbyBackdrop) {
+            this.lobbyBackdrop = new PIXI.Graphics()
+                .beginFill(0x020810, 0.72)
+                .drawRect(0, 0, SceneManager.width, SceneManager.height)
+                .endFill();
+            this.lobbyBackdrop.eventMode = 'none';
+            this.menuContainer.addChildAt(this.lobbyBackdrop, 0);
+        }
+        this.lobbyBackdrop.visible = true;
+
         this.switchPage('lobby');
     }
 
@@ -144,8 +168,13 @@ export class UIManager {
         this.mainPageContainer.removeChildren();
         this.navContainer.removeChildren();
 
-        this.drawHeader();
+        try {
+            this.drawHeader();
+        } catch (e) {
+            console.error('[UIManager] drawHeader failed', e);
+        }
 
+        try {
         switch (pageId) {
             case 'lobby':
                 LobbyPage.draw(
@@ -165,42 +194,53 @@ export class UIManager {
                 this.drawBackButton();
                 break;
             case 'mall':
-                MallPage.draw(this.mainPageContainer, (id) => this.switchPage(id));
-                this.drawBackButton();
+                void AssetManager.ensureTextures(['skin_railgun', 'skin_void', 'skin_acid']).then(() => {
+                    if (this.activeTab !== 'mall') return;
+                    MallPage.draw(this.mainPageContainer, (id) => this.switchPage(id));
+                    this.drawBackButton();
+                });
                 break;
             case 'skilltree':
                 SkillTreePage.draw(this.mainPageContainer, (id) => this.switchPage(id));
                 this.drawBackButton();
                 break;
-            case 'stage':
-                if (this.currentOnStageSelected) {
+            case 'stage': {
+                const layer = SaveManager.state.currentLayer || 1;
+                const area = SaveManager.state.currentArea[String(layer)] || 1;
+                const keys = StagePage.getRequiredAvatarKeys(layer, area);
+                void AssetManager.ensureTextures(keys).then(() => {
+                    if (this.activeTab !== 'stage' || !this.currentOnStageSelected) return;
                     StagePage.draw(this.mainPageContainer, this.currentOnStageSelected);
-                }
-                this.drawBackButton();
+                    this.drawBackButton();
+                });
                 break;
+            }
             case 'endless':
                 EndlessPage.draw(this.mainPageContainer, this.currentOnMapSelected);
                 this.drawBackButton();
                 break;
+        }
+        } catch (e) {
+            console.error('[UIManager] switchPage draw failed:', pageId, e);
         }
     }
 
     private static drawHeader(): void {
         const W = SceneManager.width;
         const decorator = new PIXI.Text(
-            'DEPTH: 4,096m | COORD: [72.1, 19.4] | STATUS: COMMAND CENTERER ONLINE',
-            { fontSize: 14, fill: 0x00f0ff, letterSpacing: 2 }
+            'DEPTH: 4,096m | COORD: [72.1, 19.4] | STATUS: COMMAND CENTER ONLINE',
+            wxTextStyle({ fontSize: 14, fill: 0x00f0ff, letterSpacing: 2 })
         );
         decorator.alpha = 0.5; decorator.x = 40; decorator.y = 15;
         this.mainPageContainer.addChild(decorator);
 
-        const goldText = new PIXI.Text(`CREDITS: ${FloatingText.formatNumber(SaveManager.state.gold)}`, {
+        const goldText = new PIXI.Text(`CREDITS: ${FloatingText.formatNumber(SaveManager.state.gold)}`, wxTextStyle({
             fontSize: 32, fill: 0xffcc00, fontWeight: 'bold', stroke: '#000', strokeThickness: 4
-        });
+        }));
         goldText.x = 40; goldText.y = 40;
         this.mainPageContainer.addChild(goldText);
 
-        const title = new PIXI.Text('DEEP SEA EMBERS', { fontSize: 48, fill: 0x00f0ff, fontWeight: 'bold', letterSpacing: 4 });
+        const title = new PIXI.Text('DEEP SEA EMBERS', wxTextStyle({ fontSize: 48, fill: 0x00f0ff, fontWeight: 'bold', letterSpacing: 4 }));
         title.anchor.set(0.5); title.x = W / 2; title.y = 60;
         this.mainPageContainer.addChild(title);
 
@@ -213,7 +253,7 @@ export class UIManager {
         btn.x = 40; btn.y = 120;
         const bg = new PIXI.Graphics();
         bg.beginFill(0x8b0000, 0.4).lineStyle(2, 0xff4444, 0.8).drawPolygon([0, 0, 180, 0, 160, 50, -20, 50]).endFill();
-        const txt = new PIXI.Text('« BACK TO HUB', { fontSize: 18, fill: 0xff4444, fontWeight: 'bold' });
+        const txt = new PIXI.Text('« BACK TO HUB', wxTextStyle({ fontSize: 18, fill: 0xff4444, fontWeight: 'bold' }));
         txt.anchor.set(0.5); txt.x = 80; txt.y = 25;
         btn.addChild(bg, txt);
         btn.eventMode = 'static'; btn.cursor = 'pointer';

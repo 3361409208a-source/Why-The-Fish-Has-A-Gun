@@ -54,8 +54,11 @@ export class SceneManager {
 
         this.applyResize(); // 立即重新适配屏幕尺寸
 
-        // 增加动态海底扭曲滤镜
-        if (!this.underwaterFilter) {
+        const isWX = typeof (globalThis as any).wx !== 'undefined';
+        // 微信真机：关闭背景水波滤镜（省显存）；浏览器保留
+        if (isWX) {
+            bgLayer.filters = null;
+        } else if (!this.underwaterFilter) {
             this.underwaterFilter = new PIXI.Filter(undefined, `
                 varying vec2 vTextureCoord;
                 uniform sampler2D uSampler;
@@ -63,16 +66,14 @@ export class SceneManager {
                 
                 void main(void) {
                     vec2 uv = vTextureCoord;
-                    // 微调扭曲力度至平衡点 (0.0018), 既有水动感又不显突兀
                     float waveX = sin(uv.y * 8.0 + uTime * 1.5) * 0.0018;
                     float waveY = cos(uv.x * 8.0 + uTime * 1.2) * 0.0018;
                     gl_FragColor = texture2D(uSampler, uv + vec2(waveX, waveY));
                 }
             `, { uTime: 0 });
-            // 修复模糊关键：Filter 的默认分辨率为 1，在 Retina 高分屏下会导致带有该滤镜的整个层直接降级变糊
             this.underwaterFilter.resolution = this.app ? this.app.renderer.resolution : Math.max(window.devicePixelRatio || 1, 2);
-            this.getLayer(Layers.Background).filters = [this.underwaterFilter];
-        } else if (this.app) {
+            bgLayer.filters = [this.underwaterFilter];
+        } else if (this.app && this.underwaterFilter) {
             this.underwaterFilter.resolution = this.app.renderer.resolution;
         }
 
@@ -93,7 +94,22 @@ export class SceneManager {
         this.createLayer(Layers.Story, 200);    // 剧情对话层（最高层）
 
         this.applyResize();
-        window.addEventListener('resize', () => this.applyResize());
+        const onResize = () => this.applyResize();
+        window.addEventListener('resize', onResize);
+
+        const wxApi = (globalThis as any).wx;
+        if (wxApi?.onWindowResize) {
+            wxApi.onWindowResize((res: { windowWidth?: number; windowHeight?: number }) => {
+                if (res?.windowWidth) {
+                    (globalThis as any).GameGlobal.__wxSystemInfo = {
+                        ...((globalThis as any).GameGlobal?.__wxSystemInfo || {}),
+                        windowWidth: res.windowWidth,
+                        windowHeight: res.windowHeight,
+                    };
+                }
+                onResize();
+            });
+        }
 
         // 启动全局更新
         this.app.ticker.add((delta) => {
@@ -154,79 +170,57 @@ export class SceneManager {
     }
 
     public static applyResize(): void {
-        const vw = window.innerWidth;
-        const vh = window.innerHeight;
+        if (!this.app?.renderer) return;
 
-        // 关键：必须动态调整渲染器分辨率，否则画面会缩在左上角
+        // 微信真机：必须用完整窗口尺寸，勿用 safeArea（会导致只显示半屏）
+        const sys = (globalThis as any).GameGlobal?.__wxSystemInfo;
+        let vw = sys?.screenWidth ?? sys?.windowWidth ?? window.innerWidth;
+        let vh = sys?.screenHeight ?? sys?.windowHeight ?? window.innerHeight;
+        // 横屏小游戏：部分机型 window 仍是竖屏宽高，交换后 UI 才不会被裁到屏外
+        if (vh > vw) {
+            const t = vw; vw = vh; vh = t;
+        }
+        const designW = this.width;
+        const designH = this.height;
+
         this.app.renderer.resize(vw, vh);
 
-        let targetVW = vw;
-        let targetVH = vh;
-        let rotation = 0;
+        const scale = Math.min(vw / designW, vh / designH);
 
-        // 手机竖屏检测与自动横屏旋转 (Mobile Auto-Landscape)
-        if (vw < vh) {
-            rotation = Math.PI / 2;
-            targetVW = vh;
-            targetVH = vw;
-        }
-
-        const scale = Math.min(targetVW / this.width, targetVH / this.height);
-
+        // game.json 已锁定横屏，不再做竖屏旋转（旋转是真机「半屏」主因）
+        this.app.stage.pivot.set(0, 0);
+        this.app.stage.rotation = 0;
         this.app.stage.scale.set(scale);
-        this.app.stage.rotation = rotation;
+        this.app.stage.x = (vw - designW * scale) / 2;
+        this.app.stage.y = (vh - designH * scale) / 2;
 
-        if (rotation === 0) {
-            // 正常横屏布局
-            this.app.stage.x = (vw - this.width * scale) / 2;
-            this.app.stage.y = (vh - this.height * scale) / 2;
-        } else {
-            // 手机竖屏时的旋转布局 (将横屏旋转 90 度塞进竖屏)
-            // 旋转中心在 (vw, 0)，X轴指向下方，Y轴指向左方
-            this.app.stage.x = vw - (vw - this.height * scale) / 2;
-            this.app.stage.y = (vh - this.width * scale) / 2;
+        this.layoutBackground();
+    }
+
+    /** 背景在设计稿坐标系内铺满 1920×1080 */
+    private static layoutBackground(): void {
+        if (!this.bgSprite) return;
+
+        const designW = this.width;
+        const designH = this.height;
+
+        if (this.isTiled && (this.bgSprite as any).tileScale) {
+            const ts = this.bgSprite as any;
+            ts.width = designW;
+            ts.height = designH;
+            ts.x = 0;
+            ts.y = 0;
+            return;
         }
 
-        // 背景适配逻辑
-        if (this.bgSprite) {
-            if (this.isTiled && (this.bgSprite as any).tileScale) {
-                // 平铺模式 (TilingSprite)
-                const ts = this.bgSprite as any;
-                ts.width = targetVW / scale;
-                ts.height = targetVH / scale;
+        const texW = this.bgSprite.texture.width || 1;
+        const texH = this.bgSprite.texture.height || 1;
+        const bgScale = Math.max(designW / texW, designH / texH);
 
-                if (rotation === 0) {
-                    ts.x = -this.app.stage.x / scale;
-                    ts.y = -this.app.stage.y / scale;
-                } else {
-                    ts.x = -this.app.stage.y / scale;
-                    ts.y = (this.app.stage.x - vw) / scale;
-                }
-            } else {
-                // 全图拉伸覆盖模式 (Cover Mode)
-                const texW = this.bgSprite.texture.width;
-                const texH = this.bgSprite.texture.height;
-
-                // 计算铺满屏幕所需的比例
-                const bgScale = Math.max(
-                    (targetVW / scale) / texW,
-                    (targetVH / scale) / texH
-                );
-
-                this.bgSprite.scale.set(bgScale);
-                this.bgSprite.anchor.set(0.5);
-
-                // 将背景居中锁定
-                if (rotation === 0) {
-                    this.bgSprite.x = (targetVW / scale) / 2 - this.app.stage.x / scale;
-                    this.bgSprite.y = (targetVH / scale) / 2 - this.app.stage.y / scale;
-                } else {
-                    // 旋转模式下的对齐
-                    this.bgSprite.x = (targetVW / scale) / 2 - this.app.stage.y / scale;
-                    this.bgSprite.y = (targetVH / scale) / 2 + (this.app.stage.x - vw) / scale;
-                }
-            }
-        }
+        this.bgSprite.anchor.set(0.5);
+        this.bgSprite.scale.set(bgScale);
+        this.bgSprite.x = designW / 2;
+        this.bgSprite.y = designH / 2;
     }
 
     private static ambientFishes: PIXI.Sprite[] = [];
@@ -255,11 +249,12 @@ export class SceneManager {
      */
     private static updateAmbientFishes(delta: number): void {
         // 只有在大厅且没有进行战斗时才生成背景鱼
-        if (!this.isGaming) {
+        const isWX = typeof (globalThis as any).wx !== 'undefined';
+        if (!this.isGaming && !isWX) {
             this.ambientSpawnTimer += delta;
-            if (this.ambientSpawnTimer > 180) { // 大约每 3 秒尝试生成
+            if (this.ambientSpawnTimer > 180) {
                 this.ambientSpawnTimer = 0;
-                if (this.ambientFishes.length < 12) {
+                if (this.ambientFishes.length < 8) {
                     this.spawnAmbientFish();
                 }
             }
@@ -280,9 +275,11 @@ export class SceneManager {
             // 超出边界移除
             if (side > 0 && fish.x > this.width + 200) {
                 bgLayer.removeChild(fish);
+                fish.destroy({ children: true, texture: false, baseTexture: false });
                 this.ambientFishes.splice(i, 1);
             } else if (side < 0 && fish.x < -200) {
                 bgLayer.removeChild(fish);
+                fish.destroy({ children: true, texture: false, baseTexture: false });
                 this.ambientFishes.splice(i, 1);
             }
         }

@@ -1,10 +1,12 @@
 import * as PIXI from 'pixi.js';
 import { AssetManager } from '../AssetManager';
+import { SceneManager, Layers } from '../SceneManager';
 import type { Cannon } from '../entities/Cannon';
 import type { GameContext } from './GameContext';
 
 export class InputSystem {
     private isDragging: boolean = false;
+    private hitBg: PIXI.Graphics | null = null;
 
     constructor(
         private app: PIXI.Application,
@@ -14,10 +16,16 @@ export class InputSystem {
     ) {}
 
     init(): void {
-        // 仅战斗态拦截舞台空白区域；勿在 lobby 占用 stage 命中
-        this.app.stage.eventMode = 'static';
-        this.app.stage.interactiveChildren = true;
-        this.app.stage.hitArea = new PIXI.Rectangle(-1000, -1000, 3000, 3000);
+        // 创建一个全屏底层的透明交互拦截层，只在空白区域触发瞄准
+        this.hitBg = new PIXI.Graphics();
+        this.hitBg.beginFill(0x000000, 0.0001); // 极低透明度保留交互感应
+        this.hitBg.drawRect(-1000, -1000, 3000, 3000); // 覆盖整个视口
+        this.hitBg.endFill();
+        this.hitBg.eventMode = 'static';
+        this.hitBg.cursor = 'default';
+
+        const bgLayer = SceneManager.getLayer(Layers.Background);
+        bgLayer.addChild(this.hitBg);
 
         const onMove = (e: PIXI.FederatedPointerEvent) => {
             if (this.isPaused()) return;
@@ -26,30 +34,43 @@ export class InputSystem {
             if (this.ctx) { this.ctx.manualAimX = localPos.x; this.ctx.manualAimY = localPos.y; }
         };
 
-        this.app.stage.on('pointerdown', (e) => {
+        this.hitBg.on('pointerdown', (e) => {
             if (this.isPaused()) return;
             AssetManager.unlockAudio();
             this.isDragging = true;
             if (this.ctx) this.ctx.isManualAiming = true;
             onMove(e);
         });
-        this.app.stage.on('pointerup', () => {
+        this.hitBg.on('pointerup', () => {
             this.isDragging = false;
             if (this.ctx) this.ctx.isManualAiming = false;
         });
-        this.app.stage.on('pointerupoutside', () => {
+        this.hitBg.on('pointerupoutside', () => {
             this.isDragging = false;
             if (this.ctx) this.ctx.isManualAiming = false;
         });
-        this.app.stage.on('pointercancel', () => {
+        this.hitBg.on('pointercancel', () => {
             this.isDragging = false;
             if (this.ctx) this.ctx.isManualAiming = false;
         });
-        this.app.stage.on('pointermove', (e) => {
+        this.hitBg.on('pointermove', (e) => {
             if (this.isPaused()) return;
             if (this.isDragging || e.buttons > 0 || e.pointerType === 'touch') onMove(e);
         });
+    }
 
-        // 微信端触摸由 WxPixiTouch → Federated 事件驱动，与 UI 共用 stage 的 pointer 事件
+    destroy(): void {
+        if (this.hitBg) {
+            this.hitBg.off('pointerdown');
+            this.hitBg.off('pointerup');
+            this.hitBg.off('pointerupoutside');
+            this.hitBg.off('pointercancel');
+            this.hitBg.off('pointermove');
+            if (this.hitBg.parent) {
+                this.hitBg.parent.removeChild(this.hitBg);
+            }
+            this.hitBg.destroy();
+            this.hitBg = null;
+        }
     }
 }

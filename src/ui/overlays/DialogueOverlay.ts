@@ -2,6 +2,7 @@ import * as PIXI from 'pixi.js';
 import { SceneManager, Layers } from '../../SceneManager';
 import { AssetManager } from '../../AssetManager';
 import type { DialogueLine } from '../../config/dialogue.config';
+import { wxTimer } from '../../utils/wxTimer';
 
 export class DialogueOverlay {
     /**
@@ -122,7 +123,7 @@ export class DialogueOverlay {
                 if (currentChar < line.text.length) {
                     contentText.text += line.text[currentChar];
                     currentChar++;
-                    timer = setTimeout(showNextChar, 25);
+                    timer = wxTimer.setTimeout(showNextChar, 25);
                 } else {
                     isTyping = false;
                 }
@@ -130,7 +131,7 @@ export class DialogueOverlay {
 
             const next = () => {
                 if (isTyping) {
-                    clearTimeout(timer);
+                    wxTimer.clearTimeout(timer);
                     contentText.text = lines[currentLine].text;
                     isTyping = false;
                     return;

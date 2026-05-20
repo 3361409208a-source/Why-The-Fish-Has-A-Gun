@@ -1,4 +1,5 @@
 import * as PIXI from 'pixi.js';
+import { wxTimer } from './utils/wxTimer';
 
 /**
  * 资产管理器
@@ -13,6 +14,54 @@ export class AssetManager {
     private static soundNextAllowedAt: { [key: string]: number } = {};
     private static audioUnlocked: boolean = false;
     private static readonly IS_WECHAT = import.meta.env.MODE === 'wechat';
+    /** 贴图最长边上限（微信真机防 OOM，H5 略宽松） */
+    private static readonly MAX_TEX_EDGE = import.meta.env.MODE === 'wechat' ? 1024 : 2048;
+    private static readonly loadingKeys = new Set<string>();
+
+    /** 启动必载：大厅 + 基础战斗 */
+    private static readonly CORE_ASSETS: Record<string, string> = {
+        'bg_ocean': 'bg_v2.png',
+        'cannon_v3': 'cannon_v3.png',
+        'bullet_v2': 'bullet_v2.png',
+        'map_normal': 'map_normal.png',
+        'map_hard': 'map_hard.png',
+        'map_lunatic': 'map_lunatic.png',
+        'fish_tuna': 'fish_v2.png',
+        'fish_angler': 'fish_angler.png',
+        'fish_shark': 'fish_shark.png',
+        'fish_jelly': 'fish_jelly.png',
+        'fish_dragon': 'fish_dragon_serpentine.png',
+        'fish_kraken': 'fish_kraken.png',
+        'skin_gatling': 'skin_gatling.png',
+        'skin_heavy': 'skin_heavy.png',
+        'skin_tuna': 'skin_tuna.png',
+        'skin_lightning': 'skin_lightning.png',
+    };
+
+    /** 按需加载：Boss / 特殊鱼 / 商城皮肤（微信不在首屏全载） */
+    private static readonly LAZY_ASSETS: Record<string, string> = {
+        'boss_leviathan': 'boss_leviathan.png',
+        'boss_whale': 'boss_whale.png',
+        'boss_crab': 'boss_crab.png',
+        'boss_manta': 'boss_manta.png',
+        'boss_titan_whale': 'boss_titan_whale.png',
+        'boss_titan_serpent': 'boss_titan_serpent.png',
+        'boss_titan_shark': 'boss_titan_shark.png',
+        'boss_titan_dragon': 'boss_titan_dragon.png',
+        'boss_gg': 'boss_gg.png',
+        'fish_cyber_shark': 'fish_cyber_shark.png',
+        'fish_bio_piranha': 'fish_bio_piranha.png',
+        'fish_tech_angler': 'fish_tech_angler.png',
+        'fish_railgun_swordfish': 'fish_railgun_swordfish.png',
+        'fish_cyber_salmon': 'fish_cyber_salmon.png',
+        'fish_bio_pufferfish': 'fish_bio_pufferfish.png',
+        'fish_armored_barracuda': 'fish_armored_barracuda.png',
+        'fish_cyber_tetra': 'fish_cyber_tetra.png',
+        'fish_scifi_stingray': 'fish_scifi_stingray.png',
+        'skin_railgun': 'skin_railgun.png',
+        'skin_void': 'skin_void.png',
+        'skin_acid': 'skin_acid.png',
+    };
 
     /** COS 未上传时，用已存在的贴图键名替代（值须是 assetsToLoad 里能成功加载的 key） */
     private static readonly TEXTURE_FALLBACK: Record<string, string> = {
@@ -46,6 +95,7 @@ export class AssetManager {
                 this.loadExternalAssets(onProgress),
                 this.loadSounds().catch((e) => console.warn('Sound init skipped:', e)),
             ]);
+            this.logTextureMemory('init done');
             console.log('Asset Manager Initialized Successfully');
         } catch (error: any) {
             console.error('Critical Asset Loading Error:', error.message);
@@ -89,7 +139,7 @@ export class AssetManager {
             const wx = (window as any).wx;
             if (typeof wx?.createInnerAudioContext !== 'function') return;
             for (const [key, url] of Object.entries(soundMap)) {
-                const poolSize = key === 'shoot' ? 4 : 1;
+                const poolSize = key === 'shoot' ? 2 : 1;
                 this.wxSoundPools[key] = [];
                 for (let i = 0; i < poolSize; i++) {
                     const ctx = wx.createInnerAudioContext();
@@ -126,51 +176,96 @@ export class AssetManager {
             return "./assets/" + p;
         };
 
-        const assetsToLoad = {
-            'bg_ocean': 'bg_v2.png',
-            'cannon_v3': 'cannon_v3.png',
-            'bullet_v2': 'bullet_v2.png',
-            'map_normal': 'map_normal.png',
-            'map_hard': 'map_hard.png',
-            'map_lunatic': 'map_lunatic.png',
-            'fish_tuna': 'fish_v2.png',
-            'fish_angler': 'fish_angler.png',
-            'fish_shark': 'fish_shark.png',
-            'fish_jelly': 'fish_jelly.png',
-            'fish_dragon': 'fish_dragon_serpentine.png',
-            'fish_kraken': 'fish_kraken.png',
-            'boss_leviathan': 'boss_leviathan.png',
-            'boss_whale': 'boss_whale.png',
-            'boss_crab': 'boss_crab.png',
-            'boss_manta': 'boss_manta.png',
-            'boss_titan_whale': 'boss_titan_whale.png',
-            'boss_titan_serpent': 'boss_titan_serpent.png',
-            'boss_titan_shark': 'boss_titan_shark.png',
-            'boss_titan_dragon': 'boss_titan_dragon.png',
-            'boss_gg': 'boss_gg.png',
-            'fish_cyber_shark': 'fish_cyber_shark.png',
-            'fish_bio_piranha': 'fish_bio_piranha.png',
-            'fish_tech_angler': 'fish_tech_angler.png',
-            'fish_railgun_swordfish': 'fish_railgun_swordfish.png',
-            'fish_cyber_salmon': 'fish_cyber_salmon.png',
-            'fish_bio_pufferfish': 'fish_bio_pufferfish.png',
-            'fish_armored_barracuda': 'fish_armored_barracuda.png',
-            'fish_cyber_tetra': 'fish_cyber_tetra.png',
-            'fish_scifi_stingray': 'fish_scifi_stingray.png',
-            'skin_gatling': 'skin_gatling.png',
-            'skin_heavy': 'skin_heavy.png',
-            'skin_tuna': 'skin_tuna.png',
-            'skin_lightning': 'skin_lightning.png',
-            // --- 永久商城武器 (金币购买) ---
-            'skin_railgun': 'skin_railgun.png',
-            'skin_void': 'skin_void.png',
-            'skin_acid': 'skin_acid.png'
-        };
+        const assetsToLoad = IS_WECHAT_BUILD
+            ? { ...this.CORE_ASSETS }
+            : { ...this.CORE_ASSETS, ...this.LAZY_ASSETS };
+
+        await this.loadAssetMap(assetsToLoad, onProgress);
+        this.applyTextureFallbacks();
+    }
+
+    /** 按需加载贴图（关卡页 / 商城等进入前调用） */
+    public static async ensureTextures(keys: string[]): Promise<void> {
+        const map: Record<string, string> = {};
+        for (const key of keys) {
+            if (this.textures[key]?.baseTexture?.valid && this.textures[key] !== PIXI.Texture.WHITE) continue;
+            const path = this.LAZY_ASSETS[key] ?? this.CORE_ASSETS[key];
+            if (path) map[key] = path;
+        }
+        if (Object.keys(map).length === 0) return;
+        await this.loadAssetMap(map);
+        this.applyTextureFallbacks();
+    }
+
+    private static logTextureMemory(tag: string): void {
+        let px = 0;
+        let n = 0;
+        for (const t of Object.values(this.textures)) {
+            if (!t?.baseTexture?.valid) continue;
+            const w = t.width || 0;
+            const h = t.height || 0;
+            if (w <= 0 || h <= 0) continue;
+            px += w * h;
+            n++;
+        }
+        const mb = ((px * 4) / (1024 * 1024)).toFixed(1);
+        console.log(`[Asset] ${tag}: ${n} textures, ~${mb}MB RGBA (估算)`);
+    }
+
+    private static downscaleImageSource(img: { width: number; height: number }): HTMLCanvasElement | typeof img {
+        const maxEdge = this.MAX_TEX_EDGE;
+        const iw = img.width;
+        const ih = img.height;
+        if (Math.max(iw, ih) <= maxEdge) return img as HTMLCanvasElement;
+
+        const scale = maxEdge / Math.max(iw, ih);
+        const tw = Math.max(1, Math.floor(iw * scale));
+        const th = Math.max(1, Math.floor(ih * scale));
+
+        let canvas: HTMLCanvasElement;
+        const wx = (globalThis as any).wx;
+        if (typeof wx?.createOffscreenCanvas === 'function') {
+            canvas = wx.createOffscreenCanvas({ type: '2d', width: tw, height: th }) as HTMLCanvasElement;
+        } else if (typeof document !== 'undefined') {
+            canvas = document.createElement('canvas');
+            canvas.width = tw;
+            canvas.height = th;
+        } else {
+            return img as HTMLCanvasElement;
+        }
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return img as HTMLCanvasElement;
+        ctx.drawImage(img as CanvasImageSource, 0, 0, tw, th);
+        return canvas;
+    }
+
+    private static textureFromImage(img: { width: number; height: number }, key: string): PIXI.Texture {
+        const source = this.downscaleImageSource(img);
+        const resource = new PIXI.ImageResource(source as any);
+        const base = new PIXI.BaseTexture(resource, {
+            alphaMode: PIXI.ALPHA_MODES.NO_PREMULTIPLIED_ALPHA,
+            resolution: 1,
+        });
+        const t = new PIXI.Texture(base);
+        if (!PIXI.Cache.has(key)) PIXI.Texture.addToCache(t, key);
+        return t;
+    }
+
+    private static async loadAssetMap(
+        assetsToLoad: Record<string, string>,
+        onProgress?: (p: number) => void
+    ): Promise<void> {
+        const IS_WECHAT_BUILD = import.meta.env.MODE === 'wechat';
+        const REMOTE_BASE = 'https://yu-1330371299.cos.ap-guangzhou.myqcloud.com/';
+        const getPath = (p: string) => (IS_WECHAT_BUILD ? REMOTE_BASE + p : './assets/' + p);
 
         const total = Object.keys(assetsToLoad).length;
         let loaded = 0;
 
         const loadPromises = Object.entries(assetsToLoad).map(async ([key, path]) => {
+            if (this.loadingKeys.has(key)) return;
+            this.loadingKeys.add(key);
             const finalPath = getPath(path);
             try {
                 let tex: PIXI.Texture;
@@ -179,7 +274,7 @@ export class AssetManager {
                     // 微信环境下，最稳妥的是手动 wx.createImage
                     tex = await new Promise<PIXI.Texture>((resolve, reject) => {
                         const img = (window as any).wx.createImage();
-                        const timeoutId = (window as any).setTimeout(() => {
+                        const timeoutId = wxTimer.setTimeout(() => {
                             img.onload = null; img.onerror = null;
                             reject(new Error('Texture Load Timeout: ' + key));
                         }, 15000);
@@ -189,12 +284,8 @@ export class AssetManager {
                         } catch (e) { }
 
                         img.onload = () => {
-                            (window as any).clearTimeout(timeoutId);
-                            const resource = new PIXI.ImageResource(img);
-                            const base = new PIXI.BaseTexture(resource, { alphaMode: PIXI.ALPHA_MODES.NO_PREMULTIPLIED_ALPHA, resolution: 1 });
-                            const t = new PIXI.Texture(base);
-                            if (!PIXI.Cache.has(key)) PIXI.Texture.addToCache(t, key);
-                            resolve(t);
+                            wxTimer.clearTimeout(timeoutId);
+                            resolve(this.textureFromImage(img, key));
                         };
                         img.onerror = reject;
                         img.src = finalPath;
@@ -244,7 +335,6 @@ export class AssetManager {
         });
 
         await Promise.all(loadPromises);
-        this.applyTextureFallbacks();
     }
 
     /** 加载结束后，用已成功贴图替换 WHITE 占位 */
@@ -292,7 +382,7 @@ export class AssetManager {
             const clearPlaying = () => { ctx.__playing = false; };
             if (typeof ctx.offEnded === 'function') ctx.offEnded(clearPlaying);
             if (typeof ctx.onEnded === 'function') ctx.onEnded(clearPlaying);
-            else setTimeout(clearPlaying, (estDuration / rate) * 1000 + 50);
+            else wxTimer.setTimeout(clearPlaying, (estDuration / rate) * 1000 + 50);
         } catch (e) {
             console.warn(`WX sound play failed [${type}]`, e);
         }

@@ -46,6 +46,7 @@ export class WeaponShopPanel {
 
             btn.addChild(bg, name, status, actionBtn, actionTxt);
             btn.eventMode = 'static'; btn.cursor = 'pointer';
+            btn.hitArea = new PIXI.Rectangle(0, 0, 180, 95);
             btn.on('pointerdown', () => onSelect(w.id));
             this.container.addChild(btn);
         });

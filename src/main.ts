@@ -5,7 +5,14 @@ import '@pixi/unsafe-eval';
 console.log('PIXI Game Initializing on Web Platform...');
 PIXI.settings.PREFER_ENV = PIXI.ENV.WEBGL_LEGACY;
 PIXI.BaseTexture.defaultOptions.alphaMode = PIXI.ALPHA_MODES.NO_PREMULTIPLIED_ALPHA;
-if (typeof (window as any).wx === 'undefined') {
+
+// 微信小游戏检测：不能依赖 window.wx（此时 weapp-adapter 还没运行）
+// 改用 GameGlobal 或 typeof wx 来判断是否在微信环境中
+const _isWxEnvEarly = (typeof (globalThis as any).GameGlobal !== 'undefined')
+    || (typeof (globalThis as any).wx !== 'undefined')
+    || (typeof (global as any) !== 'undefined' && (global as any).wx !== 'undefined');
+
+if (!_isWxEnvEarly) {
     (PIXI.settings as any).FAIL_IF_MAJOR_PERFORMANCE_CAVEAT = false;
     (PIXI.settings as any).CREATE_IMAGE_BITMAP = true; // 浏览器环境下开启以提升性能
     
@@ -17,7 +24,9 @@ if (typeof (window as any).wx === 'undefined') {
         }
     } catch (e) { }
 } else {
-    (PIXI.settings as any).CREATE_IMAGE_BITMAP = false; // 微信端不支持
+    // 微信小游戏：CREATE_IMAGE_BITMAP 不支持，必须禁用，否则所有贴图/文字会静默失败
+    (PIXI.settings as any).CREATE_IMAGE_BITMAP = false;
+    console.log('WeChat mode detected early: CREATE_IMAGE_BITMAP disabled');
 }
 
 // 3. [纠极修复]：直接修正 PIXI 资源探测器的静态测试方法
@@ -55,6 +64,7 @@ import { getMap } from './config/maps.config';
 import { LEVELS, getLevelLocation, getLayerAreaLevels } from './config/levels.config';
 import { talentManager } from './core/TalentManager';
 import { bindWxPixiTouch } from './WxPixiTouch';
+import { applyWxTextDefaults } from './utils/wxFont';
 
 /**
  * 游戏入口：深海余烬 (全屏独立页面架构)
@@ -81,15 +91,27 @@ const initGame = async () => {
 
     // 微信真机修复：用实际游戏 canvas 替换 PIXI 内部 WebGL 探测逻辑
     // (真机上 document.createElement('canvas') 创建的第二个 canvas 不支持 WebGL)
+    const sys = (globalThis as any).GameGlobal?.__wxSystemInfo;
+    let viewW = sys?.screenWidth ?? sys?.windowWidth ?? window.innerWidth;
+    let viewH = sys?.screenHeight ?? sys?.windowHeight ?? window.innerHeight;
+    if (viewH > viewW) { const t = viewW; viewW = viewH; viewH = t; }
+    const wxDpr = sys?.pixelRatio ?? window.devicePixelRatio ?? 1;
+    const rendererDpr = isWX ? Math.min(wxDpr, 1.5) : Math.min(wxDpr, 2);
+
+    if (isWX) {
+        applyWxTextDefaults();
+        PIXI.settings.PREFER_ENV = PIXI.ENV.WEBGL_LEGACY;
+    }
+
     const rendererOptions = {
         view: canvas as HTMLCanvasElement,
-        width: window.innerWidth,
-        height: window.innerHeight,
-        resolution: Math.max(window.devicePixelRatio || 1, 2),
+        width: viewW,
+        height: viewH,
+        resolution: rendererDpr,
         autoDensity: true,
         backgroundAlpha: isWX ? 1 : 0,
         backgroundColor: 0x00050a,
-        antialias: true,
+        antialias: !isWX,
     };
 
     let app: PIXI.Application;
@@ -108,7 +130,7 @@ const initGame = async () => {
         ticker.start();
         app = { renderer, stage, ticker, view: canvas, screen: renderer.screen } as any as PIXI.Application;
         bindWxPixiTouch(app, stage);
-        console.log('WeChat: PIXI.Renderer created directly, bypassing autoDetect');
+        console.log(`WeChat: Renderer ${viewW}x${viewH} dpr=${wxDpr}`);
     } else {
         app = new PIXI.Application(rendererOptions);
     }
@@ -132,7 +154,7 @@ const initGame = async () => {
     const barFrame = new PIXI.Graphics().lineStyle(2, 0x00f0ff, 0.5).drawRoundedRect(960 - barWidth / 2, 600, barWidth, 20, 10);
     const progressBar = new PIXI.Graphics();
     const loadText = new PIXI.Text('正在检测海域异常状态...', {
-        fontFamily: 'Verdana', fontSize: 24, fill: 0x00f0ff, fontWeight: 'bold'
+        fontFamily: isWX ? 'sans-serif' : 'Verdana', fontSize: 24, fill: 0x00f0ff, fontWeight: 'bold'
     });
     loadText.anchor.set(0.5); loadText.x = 960; loadText.y = 550;
     loadingLayer.addChild(barFrame, progressBar, loadText);
@@ -144,16 +166,21 @@ const initGame = async () => {
         progressBar.clear().beginFill(0x00f0ff, 0.8).drawRoundedRect(960 - barWidth / 2, 600, barWidth * p, 20, 10).endFill();
     });
 
-    // 加载完成，淡出加载界面
-    app.ticker.add((delta) => {
-        if (loadingLayer.alpha > 0) {
-            loadingLayer.alpha -= 0.05 * delta;
-            if (loadingLayer.alpha <= 0) {
-                loadingLayer.visible = false;
-                app.stage.removeChild(loadingLayer);
+    // 加载完成：微信真机立即移除加载层（避免挡住 UI）；浏览器保留淡出
+    const removeLoading = () => {
+        loadingLayer.visible = false;
+        if (loadingLayer.parent) loadingLayer.parent.removeChild(loadingLayer);
+    };
+    if (isWX) {
+        removeLoading();
+    } else {
+        app.ticker.add((delta) => {
+            if (loadingLayer.alpha > 0) {
+                loadingLayer.alpha -= 0.05 * delta;
+                if (loadingLayer.alpha <= 0) removeLoading();
             }
-        }
-    });
+        });
+    }
 
     // 6. 全局更新循环
     app.ticker.add((delta) => {
@@ -304,11 +331,11 @@ const initGame = async () => {
     UIManager.init(app, onMapSelected);
     UIManager.setOnStageSelected(onStageSelected);
 
-    // 初始设置背景
     SceneManager.setBackground('bg_ocean');
-    
-    // 强制手动渲染第一帧，防止部分浏览器黑屏
+    SceneManager.applyResize();
+
     app.renderer.render(app.stage);
+    console.log('[Boot] Lobby UI ready');
 
     console.log('Game Started with Global Upgrades');
 };

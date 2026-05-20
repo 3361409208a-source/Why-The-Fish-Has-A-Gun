@@ -5,6 +5,7 @@ assets/
 *.mp3
 !game.json
 !game.js
+!game.bundle.js
 !weapp-adapter.js
 !project.config.json
 !project.private.config.json

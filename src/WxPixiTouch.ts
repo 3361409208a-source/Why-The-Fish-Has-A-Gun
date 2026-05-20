@@ -40,18 +40,13 @@ function resolveScreenPoint(app: PIXI.Application, t: any): PIXI.Point {
     const vw = view.width || rw * renderer.resolution;
     const vh = view.height || rh * renderer.resolution;
 
-    const sys = (globalThis as any).GameGlobal?.__wxSystemInfo;
-    const safeTop = sys?.safeArea?.top ?? 0;
-    const safeLeft = sys?.safeArea?.left ?? 0;
-
     const rawCandidates: Array<{ x: number; y: number }> = [];
     if (t.x != null && t.y != null) rawCandidates.push({ x: t.x, y: t.y });
     if (t.clientX != null && t.clientY != null) {
-        rawCandidates.push({ x: t.clientX - safeLeft, y: t.clientY - safeTop });
         rawCandidates.push({ x: t.clientX, y: t.clientY });
     }
     if (t.pageX != null && t.pageY != null) {
-        rawCandidates.push({ x: t.pageX - safeLeft, y: t.pageY - safeTop });
+        rawCandidates.push({ x: t.pageX, y: t.pageY });
     }
 
     const toLogical = (x: number, y: number) => {

@@ -10,6 +10,8 @@ const timers = ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'r
 timers.forEach(name => {
     const fn = _GameGlobal[name] || (_wx[name] ? _wx[name].bind(_wx) : null);
     if (fn) {
+        _GameGlobal[name] = fn;
+        if (typeof globalThis !== 'undefined') globalThis[name] = fn;
         if (typeof window !== 'undefined') window[name] = fn;
         if (typeof global !== 'undefined') global[name] = fn;
     }
@@ -155,8 +157,12 @@ try {
     }
 } catch (e) {}
 
-_window.innerWidth = screenWidth;
-_window.innerHeight = screenHeight;
+// 横屏小游戏：保证 innerWidth >= innerHeight
+let _iw = sysInfo.windowWidth ?? screenWidth;
+let _ih = sysInfo.windowHeight ?? screenHeight;
+if (_ih > _iw) { const _t = _iw; _iw = _ih; _ih = _t; }
+_window.innerWidth = _iw;
+_window.innerHeight = _ih;
 _window.devicePixelRatio = devicePixelRatio;
 _window.wx = _wx;
 
@@ -194,7 +200,18 @@ const bindWxEvents = () => {
     });
 
     if (typeof _wx.onWindowResize === 'function') {
-        _wx.onWindowResize(() => windowHub.dispatch('resize', new globalThis.MouseEvent('resize', {})));
+        _wx.onWindowResize((res) => {
+            let w = res?.windowWidth ?? sysInfo.windowWidth ?? screenWidth;
+            let h = res?.windowHeight ?? sysInfo.windowHeight ?? screenHeight;
+            if (h > w) { const t = w; w = h; h = t; }
+            _window.innerWidth = w;
+            _window.innerHeight = h;
+            const dpr = res?.pixelRatio ?? _window.devicePixelRatio ?? devicePixelRatio;
+            mainCanvas.width = w * dpr;
+            mainCanvas.height = h * dpr;
+            _GameGlobal.__wxSystemInfo = { ...(_GameGlobal.__wxSystemInfo || sysInfo), windowWidth: w, windowHeight: h };
+            windowHub.dispatch('resize', new globalThis.MouseEvent('resize', {}));
+        });
     }
 };
 bindWxEvents();
@@ -238,25 +255,42 @@ const documentMock = {
     body: { style: {} },
     createElement: (type) => {
         if (type === 'canvas') {
-            const c = _wx.createCanvas();
-            c.width = screenWidth * devicePixelRatio;
-            c.height = screenHeight * devicePixelRatio;
-            c.style = c.style || {};
-            try { c.tagName = 'CANVAS'; } catch(e) {}
-            try { c.nodeName = 'CANVAS'; } catch(e) {}
+        // 关键修复：PIXI.Text 内部需要调用 canvas.getContext('2d') 进行字体光栅化
+        // wx.createCanvas() 只能创建 WebGL canvas，getContext('2d') 在其上会返回 null
+        // 必须使用 wx.createOffscreenCanvas({ type: '2d' }) 才能支持 2D 渲染
+        let c;
+        try {
+            if (typeof _wx.createOffscreenCanvas === 'function') {
+                // 微信 2.16.1+ 支持 createOffscreenCanvas，完美支持 2D context
+                c = _wx.createOffscreenCanvas({ type: '2d', width: 256, height: 256 });
+            } else {
+                c = _wx.createCanvas();
+            }
+        } catch(e) {
+            c = _wx.createCanvas();
+        }
+        c.width = c.width || 256;
+        c.height = c.height || 256;
+        c.style = c.style || {};
+        try { c.tagName = 'CANVAS'; } catch(e) {}
+        try { c.nodeName = 'CANVAS'; } catch(e) {}
+        if (typeof c.addEventListener !== 'function') {
             patchEventTarget(c, createListenerHub());
-            c.getBoundingClientRect = () => ({ left: 0, top: 0, width: screenWidth, height: screenHeight });
-            // 拦截 webgl2；若 WebGL1 失败（PC模拟器第二个canvas不支持）则 proxy 到 mainCanvas
+        }
+        c.getBoundingClientRect = () => ({ left: 0, top: 0, width: screenWidth, height: screenHeight });
+        // 拦截 webgl2；若 WebGL1 失败（PC模拟器第二个canvas不支持）则 proxy 到 mainCanvas
+        if (c.getContext) {
             const _cOrig = c.getContext.bind(c);
             c.getContext = (t, o) => {
                 if (t === 'webgl2') return null;
                 const r = _cOrig(t, o);
                 if (!r && (t === 'webgl' || t === 'experimental-webgl')) {
-                    return mainCanvas.getContext(t); // 忽略 options，返回已有 context 防止因 options 不同返回 null
+                    return mainCanvas.getContext(t);
                 }
                 return r;
             };
-            return c;
+        }
+        return c;
         }
         if (type === 'img' || type === 'image') {
             const img = _wx.createImage();
