@@ -69,20 +69,8 @@ import { applyWxTextDefaults } from './utils/wxFont';
  * 游戏入口：深海余烬 (全屏独立页面架构)
  */
 const initGame = async () => {
-    // 0. 强制横屏：手机竖着拿时，CSS 旋转页面 90° 实现横屏效果
-    const applyForcedLandscape = () => {
-        if (typeof document === 'undefined') return;
-        const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-        const isPortrait = window.innerHeight > window.innerWidth;
-        if (isMobile && isPortrait) {
-            document.documentElement.classList.add('forced-landscape');
-        } else {
-            document.documentElement.classList.remove('forced-landscape');
-        }
-    };
-    applyForcedLandscape();
-    window.addEventListener('orientationchange', () => setTimeout(applyForcedLandscape, 100));
-    window.addEventListener('resize', () => setTimeout(applyForcedLandscape, 100));
+    // 0. 横屏提示：手机端竖屏时在顶部显示提示条（CSS @media 控制显隐，pointer-events: none 不阻挡触摸）
+    //    同时尝试 Screen Orientation API 锁定横屏（Android Chrome 支持，iOS 自动降级为提示条）
 
     // 1. 初始化存档
     SaveManager.load();
