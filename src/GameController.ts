@@ -137,7 +137,7 @@ export class GameController {
 
         this.initBackButton(app, onBack);
         this.input.init();
-        this.weapons.updateShowUI();
+        this.weapons.updateShopUI();
 
         SceneManager.getLayer(Layers.UI).visible = true;
         if (stageLevel > 0 || config.isEndless) {
@@ -165,7 +165,7 @@ export class GameController {
 
         if (dialogLines && dialogLines.length > 0) {
             this.ctx.isPaused = true;
-            UIManager.showDialog(dialogLines).then(() => {
+            UIManager.showDialogue(dialogLines).then(() => {
                 this.ctx.isPaused = false;
             });
         }
@@ -179,7 +179,7 @@ export class GameController {
         const bossSpawnUnsub = EventBus.on(GameEvents.STAGE_BOSS_SPAWNED, () => {
             if (lvlDef && lvlDef.spawnDialogue && lvlDef.spawnDialogue.length > 0) {
                 this.ctx.isPaused = true;
-                UIManager.showDialog(lvlDef.spawnDialogue).then(() => {
+                UIManager.showDialogue(lvlDef.spawnDialogue).then(() => {
                     this.ctx.isPaused = false;
                 });
             }
@@ -198,18 +198,18 @@ export class GameController {
                         if (nextLvl && restartCallback) {
                             const layerKey = String(currentLayer);
                             const levelKey = String(stageLevel);
-                            if (!SaveManager.state.playerStageScores[layerKey]) {
-                                SaveManager.state.playerStageScores[layerKey] = {};
+                            if (!SaveManager.state.layerStageScores[layerKey]) {
+                                SaveManager.state.layerStageScores[layerKey] = {};
                             }
-                            const prev = SaveManager.state.playerStageScores[layerKey][levelKey] ?? 0;
+                            const prev = SaveManager.state.layerStageScores[layerKey][levelKey] ?? 0;
                             if (this.ctx.stageScore > prev) {
-                                SaveManager.state.playerStageScores[layerKey][levelKey] = this.ctx.stageScore;
+                                SaveManager.state.layerStageScores[layerKey][levelKey] = this.ctx.stageScore;
                             }
-                            if (!SaveManager.state.unlockedPlayerStages[layerKey]) {
-                                SaveManager.state.unlockedPlayerStages[layerKey] = [];
+                            if (!SaveManager.state.unlockedLayerStages[layerKey]) {
+                                SaveManager.state.unlockedLayerStages[layerKey] = [];
                             }
-                            if (!SaveManager.state.unlockedPlayerStages[layerKey].includes(nextGlobalLevel)) {
-                                SaveManager.state.unlockedPlayerStages[layerKey].push(nextGlobalLevel);
+                            if (!SaveManager.state.unlockedLayerStages[layerKey].includes(nextGlobalLevel)) {
+                                SaveManager.state.unlockedLayerStages[layerKey].push(nextGlobalLevel);
                             }
                             SaveManager.save();
                             this.destroy();
@@ -254,19 +254,19 @@ export class GameController {
             const layerKey = String(currentLayer);
             const levelKey = String(stageLevel);
 
-            if (!SaveManager.state.playerStageScores[layerKey]) {
-                SaveManager.state.playerStageScores[layerKey] = {};
+            if (!SaveManager.state.layerStageScores[layerKey]) {
+                SaveManager.state.layerStageScores[layerKey] = {};
             }
-            if (!SaveManager.state.unlockedPlayerStages[layerKey]) {
-                SaveManager.state.unlockedPlayerStages[layerKey] = [];
+            if (!SaveManager.state.unlockedLayerStages[layerKey]) {
+                SaveManager.state.unlockedLayerStages[layerKey] = [];
             }
-            if (!SaveManager.state.unlockedPlayerAreas[layerKey]) {
-                SaveManager.state.unlockedPlayerAreas[layerKey] = [1];
+            if (!SaveManager.state.unlockedLayerAreas[layerKey]) {
+                SaveManager.state.unlockedLayerAreas[layerKey] = [1];
             }
 
-            const prev = SaveManager.state.playerStageScores[layerKey][levelKey] ?? 0;
+            const prev = SaveManager.state.layerStageScores[layerKey][levelKey] ?? 0;
             if (this.ctx.stageScore > prev) {
-                SaveManager.state.playerStageScores[layerKey][levelKey] = this.ctx.stageScore;
+                SaveManager.state.layerStageScores[layerKey][levelKey] = this.ctx.stageScore;
             }
 
             const nextLevelInArea = levelInArea + 1;
@@ -274,31 +274,31 @@ export class GameController {
                 const nextLvl = areaLevels[nextLevelInArea - 1];
                 if (nextLvl && this.ctx.stageScore >= nextLvl.unlockScore) {
                     const nextGlobalLevel = nextLvl.id;
-                    if (!SaveManager.state.unlockedPlayerStages[layerKey]?.includes(nextGlobalLevel)) {
-                        if (!SaveManager.state.unlockedPlayerStages[layerKey]) {
-                            SaveManager.state.unlockedPlayerStages[layerKey] = [];
+                    if (!SaveManager.state.unlockedLayerStages[layerKey]?.includes(nextGlobalLevel)) {
+                        if (!SaveManager.state.unlockedLayerStages[layerKey]) {
+                            SaveManager.state.unlockedLayerStages[layerKey] = [];
                         }
-                        SaveManager.state.unlockedPlayerStages[layerKey].push(nextGlobalLevel);
+                        SaveManager.state.unlockedLayerStages[layerKey].push(nextGlobalLevel);
                     }
                 }
             }
 
             if (levelInArea === LEVELS_PER_AREA) {
                 const nextArea = currentArea + 1;
-                if (!SaveManager.state.unlockedPlayerAreas[layerKey].includes(nextArea)) {
-                    SaveManager.state.unlockedPlayerAreas[layerKey].push(nextArea);
+                if (!SaveManager.state.unlockedLayerAreas[layerKey].includes(nextArea)) {
+                    SaveManager.state.unlockedLayerAreas[layerKey].push(nextArea);
                     const nextAreaFirstLevel = nextArea * LEVELS_PER_AREA + 1;
-                    if (!SaveManager.state.unlockedPlayerStages[layerKey].includes(nextAreaFirstLevel)) {
-                        SaveManager.state.unlockedPlayerStages[layerKey].push(nextAreaFirstLevel);
+                    if (!SaveManager.state.unlockedLayerStages[layerKey].includes(nextAreaFirstLevel)) {
+                        SaveManager.state.unlockedLayerStages[layerKey].push(nextAreaFirstLevel);
                     }
                 }
             }
 
             if (levelInArea === LEVELS_PER_AREA && currentArea >= 3) {
                 const nextPlayer = currentLayer + 1;
-                if (isLayerUnlocked(nextPlayer, SaveManager.state.playerStageScores)) {
-                    if (!SaveManager.state.unlockedPlayers.includes(nextPlayer)) {
-                        SaveManager.state.unlockedPlayers.push(nextPlayer);
+                if (isLayerUnlocked(nextPlayer, SaveManager.state.layerStageScores)) {
+                    if (!SaveManager.state.unlockedLayers.includes(nextPlayer)) {
+                        SaveManager.state.unlockedLayers.push(nextPlayer);
                     }
                 }
             }
@@ -312,23 +312,23 @@ export class GameController {
             bossKilledUnsub();
             const layerKey = String(currentLayer);
             const levelKey = String(stageLevel);
-            if (!SaveManager.state.playerStageScores[layerKey]) {
-                SaveManager.state.playerStageScores[layerKey] = {};
+            if (!SaveManager.state.layerStageScores[layerKey]) {
+                SaveManager.state.layerStageScores[layerKey] = {};
             }
-            const prev = SaveManager.state.playerStageScores[layerKey][levelKey] ?? 0;
+            const prev = SaveManager.state.layerStageScores[layerKey][levelKey] ?? 0;
             if (this.ctx.stageScore > prev) {
-                SaveManager.state.playerStageScores[layerKey][levelKey] = this.ctx.stageScore;
+                SaveManager.state.layerStageScores[layerKey][levelKey] = this.ctx.stageScore;
             }
             const nextLevelInArea = levelInArea + 1;
             if (nextLevelInArea <= LEVELS_PER_AREA) {
                 const nextLvl = areaLevels[nextLevelInArea - 1];
                 if (nextLvl && this.ctx.stageScore >= nextLvl.unlockScore) {
                     const nextGlobalLevel = nextLvl.id;
-                    if (!SaveManager.state.unlockedPlayerStages[layerKey]?.includes(nextGlobalLevel)) {
-                        if (!SaveManager.state.unlockedPlayerStages[layerKey]) {
-                            SaveManager.state.unlockedPlayerStages[layerKey] = [];
+                    if (!SaveManager.state.unlockedLayerStages[layerKey]?.includes(nextGlobalLevel)) {
+                        if (!SaveManager.state.unlockedLayerStages[layerKey]) {
+                            SaveManager.state.unlockedLayerStages[layerKey] = [];
                         }
-                        SaveManager.state.unlockedPlayerStages[layerKey].push(nextGlobalLevel);
+                        SaveManager.state.unlockedLayerStages[layerKey].push(nextGlobalLevel);
                     }
                 }
             }
@@ -358,7 +358,7 @@ export class GameController {
         };
     }
 
-    private initBackButton(app: PIXI.Application, onBack: (() => void)): void {
+    private initBackButton(app: PIXI.Application, onBack: (() => void) | undefined): void {
         this.backBtn = new PIXI.Container();
         this.backBtn.x = 20; this.backBtn.y = SceneManager.height - 66;
         const btnBg = new PIXI.Graphics()
