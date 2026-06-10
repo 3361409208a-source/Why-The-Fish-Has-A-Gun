@@ -16,11 +16,10 @@ if (!_isWxEnvEarly) {
     (PIXI.settings as any).FAIL_IF_MAJOR_PERFORMANCE_CAVEAT = false;
     (PIXI.settings as any).CREATE_IMAGE_BITMAP = true; // 浏览器环境下开启以提升性能
     
-    // [核弹级修复]：在浏览器环境强制屏蔽可能导致崩溃的屏幕锁定 API
+    // 浏览器环境：尝试锁定横屏方向，失败则依赖 CSS 旋转降级
     try {
         if (typeof screen !== 'undefined' && (screen as any).orientation) {
-            (screen as any).orientation.lock = () => Promise.resolve();
-            console.log('Screen orientation lock disabled for compatibility.');
+            console.log('Screen orientation lock available.');
         }
     } catch (e) { }
 } else {
@@ -70,6 +69,21 @@ import { applyWxTextDefaults } from './utils/wxFont';
  * 游戏入口：深海余烬 (全屏独立页面架构)
  */
 const initGame = async () => {
+    // 0. 强制横屏：手机竖着拿时，CSS 旋转页面 90° 实现横屏效果
+    const applyForcedLandscape = () => {
+        if (typeof document === 'undefined') return;
+        const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+        const isPortrait = window.innerHeight > window.innerWidth;
+        if (isMobile && isPortrait) {
+            document.documentElement.classList.add('forced-landscape');
+        } else {
+            document.documentElement.classList.remove('forced-landscape');
+        }
+    };
+    applyForcedLandscape();
+    window.addEventListener('orientationchange', () => setTimeout(applyForcedLandscape, 100));
+    window.addEventListener('resize', () => setTimeout(applyForcedLandscape, 100));
+
     // 1. 初始化存档
     SaveManager.load();
 
@@ -338,6 +352,13 @@ const initGame = async () => {
     console.log('[Boot] Lobby UI ready');
 
     console.log('Game Started with Global Upgrades');
+
+    // 尝试锁定横屏方向（Android Chrome 支持，iOS Safari 不支持但 CSS 降级已生效）
+    try {
+        if (typeof screen !== 'undefined' && (screen as any).orientation?.lock) {
+            (screen as any).orientation.lock('landscape').catch(() => {});
+        }
+    } catch (e) { }
 };
 
 // 延迟启动，确保 DOM 就绪

@@ -30,6 +30,24 @@
             z-index: 1 !important; /* 视频在 Body 之上，Canvas 之下 */
             background-color: #000 !important;
         }
+        /* 强制横屏：手机竖着拿时，旋转整个页面 90° */
+        html.forced-landscape body {
+            width: 100vh !important;
+            height: 100vw !important;
+            transform: rotate(90deg) !important;
+            transform-origin: 0 0 !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 100vw !important;
+        }
+        html.forced-landscape canvas {
+            width: 100vh !important;
+            height: 100vw !important;
+        }
+        html.forced-landscape video#bg-video {
+            width: 100vh !important;
+            height: 100vw !important;
+        }
     </style>
 </head>
 <body style="background-color: #000 !important;">
