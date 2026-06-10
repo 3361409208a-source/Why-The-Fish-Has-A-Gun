@@ -75,6 +75,21 @@ const initGame = async () => {
     // 1. 初始化存档
     SaveManager.load();
 
+    // [优化 P1] 页面隐藏时强制存档（绕过防抖），防止快速退出丢失数据
+    if (typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                SaveManager.save();
+            }
+        });
+    }
+    // 微信小游戏：onAppHide 强制存档
+    if (typeof (window as any).wx !== 'undefined' && (window as any).wx.onAppHide) {
+        (window as any).wx.onAppHide(() => {
+            SaveManager.save();
+        });
+    }
+
     const isWX = typeof (window as any).wx !== 'undefined' ||
         (typeof (window as any).GameGlobal !== 'undefined') ||
         (typeof global !== 'undefined' && (global as any).wx !== 'undefined');

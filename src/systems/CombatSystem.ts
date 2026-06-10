@@ -86,11 +86,14 @@ export class CombatSystem {
             const pierceCount = b.isSplitBullet ? 0 : getSkillEffect('pierce');
             let pierced = 0;
             const bx = b.x, by = b.y;
+            // [优化 P0] 追踪 heavy 子弹本帧是否命中（用于触发 AOE 批量闪烁）
+            let heavyHitThisFrame = false;
 
             for (let fi = fishes.length - 1; fi >= 0; fi--) {
                 const f = fishes[fi];
                 if (!f.isActive) continue;
-                if (b.hitFishList && b.hitFishList.length > 0 && b.hitFishList.includes(f)) continue;
+                // [优化 P1] hitFishSet 替代 hitFishList（O(1) 查找）
+                if (b.hitFishSet && b.hitFishSet.size > 0 && b.hitFishSet.has(f)) continue;
 
                 // [优化] 先做快速 AABB 排除再做精确圆检测
                 const dx = bx - f.x;
@@ -104,7 +107,14 @@ export class CombatSystem {
                 // 命中
                 const id = this.ctx.unlockedWeapons[this.ctx.currentWeaponIndex];
                 const lvl = this.ctx.weaponLevels[id] || 1;
-                this.onHitEffect(id, f.x, f.y, lvl);
+
+                // [优化 P0] heavy 武器命中时不逐个闪烁，改用 AOE 批量 Overlay
+                if (id === 'heavy') {
+                    heavyHitThisFrame = true;
+                } else {
+                    this.effects.spawnHitFlash(f.x, f.y);
+                }
+                this.onHitEffectNoFlash(id, f.x, f.y, lvl);
 
                 if (id !== 'heavy') AssetManager.playSound('hit');
                 this.applyDamage(f, b.damage * talentDmgMult);
@@ -128,14 +138,43 @@ export class CombatSystem {
 
                 if (pierced < pierceCount) {
                     pierced++;
-                    if (!b.hitFishList) b.hitFishList = [];
-                    b.hitFishList.push(f);
+                    // [优化 P1] 使用 Set 替代 Array
+                    if (!b.hitFishSet) b.hitFishSet = new Set<Fish>();
+                    b.hitFishSet.add(f);
                     continue;
                 }
 
                 b.kill();
                 break;
             }
+
+            // [优化 P0] heavy 子弹本帧命中后，统一触发一次 AOE 批量闪烁
+            if (heavyHitThisFrame) {
+                this.effects.spawnAoeFlash();
+                AssetManager.playSound('explosion');
+            }
+        }
+    }
+
+    /**
+     * [优化 P0] 命中特效（不含 spawnHitFlash），heavy 武器用 AOE 批量闪烁替代
+     */
+    private onHitEffectNoFlash(id: string, x: number, y: number, lvl: number): void {
+        switch (id) {
+            case 'gatling':
+                this.effects.spawnParticles(x, y, 6, 0xffff00, 4);
+                break;
+            case 'heavy':
+                this.effects.spawnParticles(x, y, 40, 0xffdf00, 10);
+                this.effects.spawnParticles(x, y, 25, 0xff5500, 8);
+                this.effects.spawnParticles(x, y, 20, 0x00ff00, 12);
+                this.effects.spawnShockwave(x, y, 2.5 + lvl * 0.5);
+                break;
+            case 'lightning':
+                this.effects.spawnParticles(x, y, 8, 0x00ffff, 5);
+                break;
+            default:
+                this.effects.spawnParticles(x, y, 4, 0xffffff, 2);
         }
     }
 
@@ -233,7 +272,8 @@ export class CombatSystem {
         const allowComboOnKill = opts.allowComboOnKill ?? true;
         const showText = opts.showText ?? true;
 
-        const comboBonus = 1 + Math.min(COMBO.maxDmgBonus, this.ctx.comboCount * COMBO.dmgBonusPerCombo);
+        // [优化 P1] 使用主循环缓存的 comboBonus，不再每次碰撞重新计算
+        const comboBonus = this.ctx._cachedComboBonus || 1.0;
         const critChance = allowCrit ? ((this.ctx._cachedTalentCritChance) || 0) : 0;
         const critBoostMult = TALENT.critDamageMultiplier + getSkillEffect('critBoost');
         let finalDmg = dmg * comboBonus;

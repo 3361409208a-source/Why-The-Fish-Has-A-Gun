@@ -103,4 +103,6 @@ export interface GameContext {
     _cachedTalentCritChance: number;
     _cachedTalentFireRateMult: number;
     _cachedTalentSpeedMult: number;
+    // [优化 P1] comboBonus 缓存，主循环顶部计算一次，CombatSystem 直接读取
+    _cachedComboBonus: number;
 }

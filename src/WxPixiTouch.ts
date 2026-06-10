@@ -74,7 +74,9 @@ function resolveScreenPoint(app: PIXI.Application, t: any): PIXI.Point {
 }
 
 /**
- * 微信真机触摸桥：直接向 PIXI EventBoundary 注入 Federated 事件。
+ * [优化] 微信真机触摸桥：直接向 PIXI EventBoundary 注入 Federated 事件。
+ * P0 优化：预分配事件对象池（容量 5），避免每次触摸事件都 new FederatedPointerEvent
+ * 并对 touchmove 做节流（坐标变化 < 2px 时不转发）
  */
 export function bindWxPixiTouch(app: PIXI.Application, stage: PIXI.Container): void {
     patchContainerHitTest();
@@ -107,13 +109,40 @@ export function bindWxPixiTouch(app: PIXI.Application, stage: PIXI.Container): v
         return t ? resolveScreenPoint(app, t) : null;
     };
 
+    // [优化] 事件对象池 - 预分配 5 个 FederatedPointerEvent 复用
+    const EVENT_POOL_SIZE = 5;
+    const eventPool: PIXI.FederatedPointerEvent[] = [];
+    for (let i = 0; i < EVENT_POOL_SIZE; i++) {
+        eventPool.push(new PIXI.FederatedPointerEvent(boundary));
+    }
+    let poolIdx = 0;
+
+    const getEvent = (): PIXI.FederatedPointerEvent => {
+        const e = eventPool[poolIdx];
+        poolIdx = (poolIdx + 1) % EVENT_POOL_SIZE;
+        return e;
+    };
+
+    // [优化] touchmove 节流 - 坐标变化 < 2px 时不转发
+    let lastMoveX = -Infinity;
+    let lastMoveY = -Infinity;
+
     const emit = (type: string, res: WxTouchRes) => {
         const screen = readTouch(res);
         if (!screen) return;
 
+        // touchmove 节流
+        if (type === 'pointermove') {
+            const dx = screen.x - lastMoveX;
+            const dy = screen.y - lastMoveY;
+            if (dx * dx + dy * dy < 4) return; // < 2px 跳过
+            lastMoveX = screen.x;
+            lastMoveY = screen.y;
+        }
+
         boundary.rootTarget = stage;
 
-        const e = new PIXI.FederatedPointerEvent(boundary);
+        const e = getEvent();
         e.type = type;
         e.screen.copyFrom(screen);
         e.global.copyFrom(screen);
@@ -135,5 +164,5 @@ export function bindWxPixiTouch(app: PIXI.Application, stage: PIXI.Container): v
     bus.end.push((res: WxTouchRes) => emit('pointerup', res));
     bus.cancel.push((res: WxTouchRes) => emit('pointercancel', res));
 
-    console.log('[WxPixiTouch] bridge active (bounds hitTest + coord normalize)');
+    console.log('[WxPixiTouch] bridge active (bounds hitTest + coord normalize + event pool)');
 }

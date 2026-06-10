@@ -10,15 +10,52 @@ import type { GameContext } from './GameContext';
  * - spawnHitFlash 改用 PIXI Ticker 而非 requestAnimationFrame
  * - 添加粒子数量上限防止特效爆炸
  * - hitFlash 对象复用 Graphics 而非每次创建新的
+ * - P0: 闪烁池上限提升至 40 + 溢出队列分帧执行
+ * - P0: AOE 批量闪烁 Overlay（1 个 Draw Call 替代 N 个 Graphics）
  */
 export class EffectSystem {
     // [优化] 粒子数量软上限
     private static readonly MAX_PARTICLES = 300;
-    // [优化] hitFlash 对象池
+    // [优化 P0] hitFlash 对象池扩容 20 → 40
     private hitFlashPool: PIXI.Graphics[] = [];
-    private static readonly MAX_HIT_FLASHES = 20;
+    private static readonly MAX_HIT_FLASHES = 40;
+    // [优化 P0] 闪烁溢出队列（AOE 同帧命中过多时分帧延迟）
+    private flashQueue: Array<{ x: number; y: number }> = [];
+    private static readonly FLASH_QUEUE_MAX = 20;
 
-    constructor(private ctx: GameContext) { }
+    // [优化 P0] AOE 批量闪烁 Overlay
+    private aoeOverlay: PIXI.Graphics | null = null;
+    private aoeOverlayAlpha: number = 0;
+    private aoeOverlayActive: boolean = false;
+
+    constructor(private ctx: GameContext) {
+        this.initAoeOverlay();
+    }
+
+    /** 初始化 AOE 全屏闪白 Overlay */
+    private initAoeOverlay(): void {
+        this.aoeOverlay = new PIXI.Graphics();
+        this.aoeOverlay.beginFill(0xffffff, 1);
+        this.aoeOverlay.drawRect(0, 0, 1920, 1080);
+        this.aoeOverlay.endFill();
+        this.aoeOverlay.alpha = 0;
+        this.aoeOverlay.visible = false;
+        this.aoeOverlay.blendMode = PIXI.BLEND_MODES.ADD;
+        // 添加到 FX 层最顶部
+        SceneManager.getLayer(Layers.FX).addChild(this.aoeOverlay);
+    }
+
+    /**
+     * [优化 P0] 触发 AOE 批量闪烁
+     * 用 1 个全屏闪白 Overlay 代替逐鱼闪烁，1 Draw Call 替代 N 个 Graphics
+     */
+    public spawnAoeFlash(): void {
+        if (!this.aoeOverlay) return;
+        this.aoeOverlay.visible = true;
+        this.aoeOverlayAlpha = 0.3;
+        this.aoeOverlay.alpha = this.aoeOverlayAlpha;
+        this.aoeOverlayActive = true;
+    }
 
     spawnParticles(x: number, y: number, count: number, color: number, intensity: number): void {
         // [优化] 粒子数量上限检查
@@ -55,11 +92,16 @@ export class EffectSystem {
 
     /**
      * [优化] spawnHitFlash - 使用对象池 + PIXI Ticker 替代 requestAnimationFrame
-     * 原版每次都 new PIXI.Graphics() 并用 requestAnimationFrame，在高频战斗中
-     * 会创建大量独立动画循环且不受游戏暂停控制
+     * P0: 池满时入溢出队列，分帧延迟执行
      */
     spawnHitFlash(x: number, y: number): void {
-        if (this.hitFlashPool.length >= EffectSystem.MAX_HIT_FLASHES) return;
+        if (this.hitFlashPool.length >= EffectSystem.MAX_HIT_FLASHES) {
+            // [优化 P0] 溢出队列：同帧大量请求入队，分散到后几帧执行
+            if (this.flashQueue.length < EffectSystem.FLASH_QUEUE_MAX) {
+                this.flashQueue.push({ x, y });
+            }
+            return;
+        }
 
         let flash: PIXI.Graphics;
         if (this.hitFlashPool.length > 0) {
@@ -99,5 +141,31 @@ export class EffectSystem {
             flash.drawCircle(0, 0, r);
         };
         this.ctx.app.ticker.add(tickHandler);
+    }
+
+    /**
+     * [优化 P0] 每帧更新：AOE overlay 淡出 + 闪烁溢出队列排空
+     * 由 GameController.update() 调用
+     */
+    public update(delta: number): void {
+        // AOE Overlay 淡出
+        if (this.aoeOverlayActive && this.aoeOverlay) {
+            this.aoeOverlayAlpha -= 0.06 * delta;
+            if (this.aoeOverlayAlpha <= 0) {
+                this.aoeOverlayAlpha = 0;
+                this.aoeOverlay.alpha = 0;
+                this.aoeOverlay.visible = false;
+                this.aoeOverlayActive = false;
+            } else {
+                this.aoeOverlay.alpha = this.aoeOverlayAlpha;
+            }
+        }
+
+        // 闪烁溢出队列：每帧最多排空 3 个
+        const drainCount = Math.min(3, this.flashQueue.length);
+        for (let i = 0; i < drainCount; i++) {
+            const req = this.flashQueue.shift()!;
+            this.spawnHitFlash(req.x, req.y);
+        }
     }
 }

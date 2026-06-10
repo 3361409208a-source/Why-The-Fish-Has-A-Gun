@@ -39,6 +39,8 @@ export class Fish extends PIXI.Sprite {
 
     private mesh: PIXI.SimpleRope | null = null;
     private meshPoints: PIXI.Point[] = [];
+    // [优化 P1] HP 条脏标记：仅在鱼发生位移时同步 HP 条位置
+    private _positionDirty: boolean = true;
 
     public get width(): number { return this.mesh ? Math.abs(this.mesh.width * this.scale.x) : 0; }
     public get height(): number { return this.mesh ? Math.abs(this.mesh.height * this.scale.y) : 0; }
@@ -233,8 +235,9 @@ export class Fish extends PIXI.Sprite {
         // 最终兜底，确保 tex 一定存在
         if (!tex) tex = PIXI.Texture.WHITE;
 
+        // [优化 P0] SimpleRope 绳段数精简：泰坦 35→20, Boss/小兵 15→10, 普通 8→6
         const isTitan = this.bossKey && this.bossKey.startsWith('titan');
-        const segmentCount = isTitan ? 35 : ((isBoss || isMinion) ? 15 : 8);
+        const segmentCount = isTitan ? 20 : ((isBoss || isMinion) ? 10 : 6);
         this.meshPoints = [];
         const texW = tex.width || 1024;
         const segmentWidth = texW / (segmentCount - 1);
@@ -280,9 +283,6 @@ export class Fish extends PIXI.Sprite {
 
     public update(delta: number, nearbyFishes: Fish[] = []): void {
         if (!this.isActive) return;
-
-        // 同步HP条位置到世界坐标（HP条不在鱼内部，需要手动跟随）
-        this.syncHpBarPosition();
 
         this.behaviorTimer += delta;
         this.driftTimer += delta * 0.05;
@@ -376,6 +376,8 @@ export class Fish extends PIXI.Sprite {
 
         this.x += this.vx * speedRatio * delta + hitShakeX;
         this.y += (this.vy * speedRatio + vTrackComp) * delta + hitShakeY;
+        // [优化 P1] 位移后标记脏，HP 条仅在下帧需要时同步
+        this._positionDirty = true;
 
         // 旋转朝向逻辑：让鱼头指向游动方向
         const totalVy = this.vy * speedRatio + vTrackComp;
@@ -391,6 +393,9 @@ export class Fish extends PIXI.Sprite {
             this.scale.x = 1;
             this.rotation = rotationAngle + Math.PI;
         }
+
+        // [优化 P1] 位移结束后统一同步 HP 条（脏标记避免无位移时重复计算）
+        this.syncHpBarPosition();
 
         const margin = 800;
         if (this.x < -margin || this.x > SceneManager.width + margin ||
@@ -462,9 +467,12 @@ export class Fish extends PIXI.Sprite {
         this.syncHpBarPosition();
     }
 
-    /** Sync HP bar position to follow fish in world space */
+    /** [优化 P1] Sync HP bar position - 仅在脏标记时执行坐标变换 */
     private syncHpBarPosition(): void {
         if (!this.hpBarBg || !this.hpBarFill || !this.parent) return;
+        // [优化 P1] 脏标记检查：未发生位移时跳过 120 次/帧的矩阵变换
+        if (!this._positionDirty) return;
+        this._positionDirty = false;
         // 计算鱼头顶的世界坐标（在鱼上方明显位置）
         const yOffset = this.isBoss ? -this.hitRadius - 50 : -60;
         const cos = Math.cos(this.rotation);

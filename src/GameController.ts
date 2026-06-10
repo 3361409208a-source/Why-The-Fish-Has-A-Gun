@@ -86,6 +86,7 @@ export class GameController {
             _cachedTalentCritChance: 0,
             _cachedTalentFireRateMult: 1.0,
             _cachedTalentSpeedMult: 1.0,
+            _cachedComboBonus: 1.0,
         };
 
         if (stageLevel > 0) {
@@ -431,7 +432,10 @@ export class GameController {
      * 在 120 条鱼 + 200 颗子弹的场景下，每帧可能触发数千次 window 属性访问
      */
     private update(delta: number): void {
-        const dt = Math.min(delta, 3);
+        // [优化 P0] Delta Cap 收紧：微信端 1.5，浏览器端 2（原值 3 在低端机引发雪崩卡顿）
+        const IS_WECHAT = typeof (window as any).wx !== 'undefined';
+        const MAX_DELTA = IS_WECHAT ? 1.5 : 2;
+        const dt = Math.min(delta, MAX_DELTA);
         if (this.ctx.frozenTime > 0) { this.ctx.frozenTime -= dt; return; }
 
         // [优化] 缓存 Talent 值到 ctx，全系统共用
@@ -440,6 +444,8 @@ export class GameController {
         this.ctx._cachedTalentCritChance = (window as any).TalentCritChance || 0;
         this.ctx._cachedTalentFireRateMult = (window as any).TalentFireRateMult || 1.0;
         this.ctx._cachedTalentSpeedMult = (window as any).TalentSpeedMult || 1.0;
+        // [优化 P1] comboBonus 缓存到主循环顶部，CombatSystem 直接读取
+        this.ctx._cachedComboBonus = 1 + Math.min(2.0, this.ctx.comboCount * 0.05);
 
         SceneManager.update(dt);
         this.spawner.update(dt);
@@ -454,6 +460,8 @@ export class GameController {
 
         this.spawner.checkCorePickup();
         this.status.update(dt);
+        // [优化 P0] EffectSystem 更新：AOE overlay 淡出 + 闪烁队列排空
+        this.effects.update(dt);
         // [优化] CombatSystem 新增 update() 用于 save 防抖
         this.combat.update(dt);
         this.combat.checkCollisions(dt);

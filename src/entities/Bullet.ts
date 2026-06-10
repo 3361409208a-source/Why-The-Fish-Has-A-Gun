@@ -17,8 +17,8 @@ export class Bullet extends PIXI.Sprite {
     public targetFish: Fish | null = null;
     public hitDistance: number = Infinity;
     public hasHit: boolean = false;
-    /** 穿透技能：已命中的鱼列表，避免重复命中 */
-    public hitFishList: Fish[] = [];
+    /** [优化 P1] 穿透技能：已命中的鱼 Set，避免重复命中（O(1) 查找替代 Array.includes） */
+    public hitFishSet: Set<Fish> = new Set();
     /** 是否为分裂弹产生的小子弹 */
     public isSplitBullet: boolean = false;
     /** 分裂弹追踪目标（自动追击最近的鱼） */
@@ -109,7 +109,7 @@ export class Bullet extends PIXI.Sprite {
         this.visible = true;
         this.trailTimer = 0;
         this.hasHit = false;
-        this.hitFishList = [];
+        this.hitFishSet.clear();
         this.isSplitBullet = false;
         this.homingTarget = null;
     }
