@@ -143,6 +143,10 @@ export class SpawnSystem {
     }
 
     spawnNanoCore(x: number, y: number): void {
+        // [优化 P2] 场景内 NanoCore 数量上限 30，超出时不再生成
+        const activeCores = this.ctx.cores.filter(c => c.isActive).length;
+        if (activeCores >= NanoCore.MAX_SCENE_COUNT) return;
+
         const core = this.ctx.pool.get('core', () => new NanoCore());
         if (core) {
             core.spawn(x, y);

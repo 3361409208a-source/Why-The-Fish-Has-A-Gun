@@ -5,7 +5,7 @@ import { SceneManager } from '../SceneManager';
 /**
  * [优化] NanoCore
  * - 使用 SceneManager.width/height 替代 window.innerWidth/innerHeight
- * - 原版在微信小游戏环境下 window.innerWidth 可能不存在或不准
+ * - P2: 生命周期上限 600 帧，超时淡出回收；场景数量上限 30
  */
 export class NanoCore extends PIXI.Sprite {
     public isActive: boolean = false;
@@ -13,6 +13,10 @@ export class NanoCore extends PIXI.Sprite {
     private timer: number = 0;
     private startY: number = 0;
     private isGolden: boolean = false;
+    // [优化 P2] 生命周期计时器和上限
+    private lifeFrames: number = 0;
+    public static readonly MAX_LIFE_FRAMES = 600;
+    public static readonly MAX_SCENE_COUNT = 30;
 
     constructor() {
         super(AssetManager.textures['item_core']);
@@ -25,8 +29,10 @@ export class NanoCore extends PIXI.Sprite {
         this.y = y;
         this.startY = y;
         this.timer = 0;
+        this.lifeFrames = 0;
         this.isActive = true;
         this.visible = true;
+        this.alpha = 1;
         this.isGolden = isGolden;
 
         if (isGolden) {
@@ -42,6 +48,13 @@ export class NanoCore extends PIXI.Sprite {
 
     public update(delta: number): void {
         if (!this.isActive) return;
+
+        // [优化 P2] 生命周期上限检查：超时后淡出回收
+        this.lifeFrames += delta;
+        if (this.lifeFrames > NanoCore.MAX_LIFE_FRAMES) {
+            this.alpha -= 0.05 * delta;
+            if (this.alpha <= 0) { this.kill(); return; }
+        }
 
         // [优化] 使用 SceneManager 的设计分辨率而非 window
         const targetX = SceneManager.width / 2;

@@ -38,13 +38,81 @@ export class CombatSystem {
     private saveDebounceTimer: number = 0;
     private static readonly SAVE_DEBOUNCE = 60; // 每秒最多存一次
 
+    // [优化 P1] 均匀网格空间分区：1920×1080 分为 8×5 = 40 个格子
+    private static readonly GRID_COLS = 8;
+    private static readonly GRID_ROWS = 5;
+    private static readonly CELL_W = 1920 / 8; // 240px
+    private static readonly CELL_H = 1080 / 5; // 216px
+    private grid: Fish[][] = [];
+    private gridPool: Fish[][] = []; // 预分配避免 GC
+
     constructor(
         private ctx: GameContext,
         private effects: EffectSystem,
         private spawner: SpawnSystem,
         private status: StatusSystem,
         private attacks: AttackSystem,
-    ) {}
+    ) {
+        // [优化 P1] 预分配网格
+        const totalCells = CombatSystem.GRID_COLS * CombatSystem.GRID_ROWS;
+        for (let i = 0; i < totalCells; i++) {
+            this.grid.push([]);
+        }
+    }
+
+    /** [优化 P1] 每帧重建空间网格 */
+    private rebuildGrid(): void {
+        const fishes = this.ctx.fishes;
+        const cols = CombatSystem.GRID_COLS;
+        const rows = CombatSystem.GRID_ROWS;
+        const cellW = CombatSystem.CELL_W;
+        const cellH = CombatSystem.CELL_H;
+        const totalCells = cols * rows;
+
+        // 清空所有格子（复用数组，不重新分配）
+        for (let i = 0; i < totalCells; i++) {
+            this.grid[i].length = 0;
+        }
+
+        // 将活跃鱼分配到对应格子
+        for (let i = fishes.length - 1; i >= 0; i--) {
+            const f = fishes[i];
+            if (!f.isActive) continue;
+            let ci = (f.x / cellW) | 0;
+            let ri = (f.y / cellH) | 0;
+            // 钳制到合法范围
+            if (ci < 0) ci = 0; else if (ci >= cols) ci = cols - 1;
+            if (ri < 0) ri = 0; else if (ri >= rows) ri = rows - 1;
+            this.grid[ri * cols + ci].push(f);
+        }
+    }
+
+    /** [优化 P1] 查询子弹周围 3×3 格子内的鱼 */
+    private getNearbyFish(bx: number, by: number, result: Fish[]): void {
+        const cols = CombatSystem.GRID_COLS;
+        const rows = CombatSystem.GRID_ROWS;
+        const cellW = CombatSystem.CELL_W;
+        const cellH = CombatSystem.CELL_H;
+
+        let ci = (bx / cellW) | 0;
+        let ri = (by / cellH) | 0;
+        if (ci < 0) ci = 0; else if (ci >= cols) ci = cols - 1;
+        if (ri < 0) ri = 0; else if (ri >= rows) ri = rows - 1;
+
+        result.length = 0;
+        for (let dr = -1; dr <= 1; dr++) {
+            const r = ri + dr;
+            if (r < 0 || r >= rows) continue;
+            for (let dc = -1; dc <= 1; dc++) {
+                const c = ci + dc;
+                if (c < 0 || c >= cols) continue;
+                const cell = this.grid[r * cols + c];
+                for (let k = 0; k < cell.length; k++) {
+                    result.push(cell[k]);
+                }
+            }
+        }
+    }
 
     /** [优化] 每帧调用，递减 save 防抖计时器 */
     update(delta: number): void {
@@ -61,6 +129,10 @@ export class CombatSystem {
 
         const bullets = this.ctx.bullets;
         const fishes = this.ctx.fishes;
+
+        // [优化 P1] 重建空间网格（每帧一次，鱼会移动）
+        this.rebuildGrid();
+        const nearbyResult: Fish[] = [];
 
         for (let bi = bullets.length - 1; bi >= 0; bi--) {
             const b = bullets[bi];
@@ -89,8 +161,11 @@ export class CombatSystem {
             // [优化 P0] 追踪 heavy 子弹本帧是否命中（用于触发 AOE 批量闪烁）
             let heavyHitThisFrame = false;
 
-            for (let fi = fishes.length - 1; fi >= 0; fi--) {
-                const f = fishes[fi];
+            // [优化 P1] 空间网格：只查询子弹周围 3×3 格子内的鱼
+            this.getNearbyFish(bx, by, nearbyResult);
+
+            for (let fi = nearbyResult.length - 1; fi >= 0; fi--) {
+                const f = nearbyResult[fi];
                 if (!f.isActive) continue;
                 // [优化 P1] hitFishSet 替代 hitFishList（O(1) 查找）
                 if (b.hitFishSet && b.hitFishSet.size > 0 && b.hitFishSet.has(f)) continue;

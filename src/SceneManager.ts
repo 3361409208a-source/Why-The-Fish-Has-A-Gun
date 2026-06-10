@@ -1,5 +1,6 @@
 import * as PIXI from 'pixi.js';
 import { AssetManager } from './AssetManager';
+import { SaveManager } from './SaveManager';
 
 /**
  * 场景图层定义
@@ -97,8 +98,10 @@ export class SceneManager {
         const onResize = () => this.applyResize();
         window.addEventListener('resize', onResize);
 
+        // [优化 P1] 微信 onWindowResize 防抖 150ms，避免连续触发多次完整重算
         const wxApi = (globalThis as any).wx;
         if (wxApi?.onWindowResize) {
+            let resizeTimer: ReturnType<typeof setTimeout> | null = null;
             wxApi.onWindowResize((res: { windowWidth?: number; windowHeight?: number }) => {
                 if (res?.windowWidth) {
                     (globalThis as any).GameGlobal.__wxSystemInfo = {
@@ -107,7 +110,30 @@ export class SceneManager {
                         windowHeight: res.windowHeight,
                     };
                 }
-                onResize();
+                if (resizeTimer) clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(onResize, 150);
+            });
+        }
+
+        // [优化 P1] 微信内存警告分级响应
+        if (wxApi?.onMemoryWarning) {
+            wxApi.onMemoryWarning((res: { level: number }) => {
+                const level = res?.level ?? 0;
+                console.warn(`[MemoryWarning] level=${level}`);
+                if (level >= 15) {
+                    // 严重：强制存档，提示退出
+                    SaveManager.save();
+                }
+                if (level >= 10) {
+                    // 中等：暂停背景气泡粒子
+                    this.bubbles.forEach(b => { if (b.parent) b.parent.removeChild(b); });
+                    this.bubbles.length = 0;
+                    this.bubbleTimer = 0;
+                }
+                if (level >= 5) {
+                    // 轻微：清理环境鱼
+                    this.clearAmbientFishes();
+                }
             });
         }
 
