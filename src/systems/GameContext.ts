@@ -1,6 +1,6 @@
 /**
- * GameContext — 游戏会话共享状态包
- * 通过引用传递给各个系统，所有系统对同一个对象进行读写。
+ * GameContext - 游戏会话共享状态包
+ * [优化] 新增缓存字段，避免每帧读 window 全局变量
  */
 import * as PIXI from 'pixi.js';
 import type { Fish } from '../entities/Fish';
@@ -44,6 +44,7 @@ export interface GameContext {
     app: PIXI.Application;
     pool: PoolManager;
     cannon: Cannon;
+
     // 实体列表
     fishes: Fish[];
     bullets: Bullet[];
@@ -51,44 +52,55 @@ export interface GameContext {
     particles: Particle[];
     shockwaves: Shockwave[];
     lightnings: Lightning[];
+
     // 状态效果
     electrified: ElectrocuteEffect[];
     corroded: CorrodeEffect[];
     radiated: RadiationEffect[];
+
     // 经济
     crystals: number;
+
     // 武器状态
     weaponLevels: { [id: string]: number };
     unlockedWeapons: string[];
     currentWeaponIndex: number;
+
     // 难度
     hpMultiplier: number;
     spawnRate: number;
     rewardMultiplier: number;
+
     // 连击
     comboCount: number;
     comboTimer: number;
+
     // 控制
     isPaused: boolean;
     isAutoMode: boolean;
-    isManualAiming: boolean; // 玩家正在手动拖动/触摸瞄准，禁止自动追鱼覆盖
-    manualAimX: number;      // 最近一次手动指向的屏幕 X
-    manualAimY: number;      // 最近一次手动指向的屏幕 Y
+    isManualAiming: boolean;
+    manualAimX: number;
+    manualAimY: number;
     frozenTime: number;
-    // 关卡模式（0 = 随机模式，1-10 = 关卡模式）
+
+    // 关卡模式
     stageLevel: number;
-    /** 是否为无尽模式 */
     isEndless: boolean;
-    /** 本局累积分数（击杀+拾取都计入） */
     stageScore: number;
-    stageBossSpawnTimer: number;   // Boss 被击杀后重新生成的冷却倒计时（帧）
-    stageBossSpawnInterval: number;// Boss 重新生成间隔（帧）
-    /** 当前Boss是否存活 */
+    stageBossSpawnTimer: number;
+    stageBossSpawnInterval: number;
     stageBossAlive: boolean;
-    /** 是否已显示解锁提示（防止重复显示） */
     stageUnlockShown: boolean;
-    // 全局狂热（Berserk）效果
-    berserkTimer: number;          // 每 10s 一个循环的计时器
-    isBerserk: boolean;            // 是否处于狂热状态
-    berserkCharge: number;         // 能量条百分比 (0-1)
+
+    // 狂热
+    berserkTimer: number;
+    isBerserk: boolean;
+    berserkCharge: number;
+
+    // [优化] 缓存 Talent 值，每帧开头更新一次，避免每颗子弹/每条鱼都查 window
+    _cachedTalentDmgMult: number;
+    _cachedTalentGoldMult: number;
+    _cachedTalentCritChance: number;
+    _cachedTalentFireRateMult: number;
+    _cachedTalentSpeedMult: number;
 }

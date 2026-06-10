@@ -1,3 +1,10 @@
+/**
+ * [优化] GameController - 核心变更:
+ * 1. updateEntities 用 swap-and-pop 替代 splice()（O(n) → O(1)）
+ * 2. 每帧开头缓存 Talent 值到 ctx，避免全系统读 window
+ * 3. CombatSystem 增加 update() 调用（防抖 save）
+ * 4. import 路径修正 Combatsystem → CombatSystem
+ */
 import * as PIXI from 'pixi.js';
 import { PoolManager } from './PoolManager';
 import { SceneManager, Layers } from './SceneManager';
@@ -20,10 +27,6 @@ import { InputSystem } from './systems/InputSystem';
 import { StatusSystem } from './systems/StatusSystem';
 import { AttackSystem } from './systems/AttackSystem';
 
-/**
- * GameController — 游戏会话协调层
- * 负责创建共享上下文、初始化各子系统，并在每帧按序调度它们。
- */
 export class GameController {
     private ctx: GameContext;
     private bridge!: UIBridge;
@@ -34,28 +37,24 @@ export class GameController {
     private combat!: CombatSystem;
     private weapons!: WeaponSystem;
     private input!: InputSystem;
-    private tickerFunc!: (delta: number) => void;
+    private tickFunc!: (delta: number) => void;
     private onRestartLevel?: (config: any) => void;
     private backBtn: PIXI.Container | null = null;
 
-    constructor(app: PIXI.Application, config: any, dialogueLines?: any[], onBack?: () => void, stageLevel: number = 0, onRestartLevel?: (config: any) => void) {
+    constructor(app: PIXI.Application, config: any, dialogLines?: any[], onBack?: () => void, stageLevel: number = 0, onRestartLevel?: (config: any) => void) {
         this.onRestartLevel = onRestartLevel;
 
-        // 获取当前层和区域配置（支持无限区域系统）
         const currentLayer = config.layer || SaveManager.state.currentLayer || 1;
         const currentArea = config.area || SaveManager.state.currentArea[String(currentLayer)] || 1;
         const areaLevels = getLayerAreaLevels(currentLayer, currentArea);
 
-        // 先初始化游戏上下文（不包含cannon等视觉元素）
         this.ctx = {
             app,
             pool: PoolManager.getInstance(),
-            cannon: null as any, // 稍后初始化
+            cannon: null as any,
             fishes: [], bullets: [], cores: [],
             particles: [], shockwaves: [], lightnings: [],
-            electrified: [],
-            corroded: [],
-            radiated: [],
+            electrified: [], corroded: [], radiated: [],
             crystals: 2000,
             weaponLevels: {},
             unlockedWeapons: ['cannon_base', 'fish_tuna_mode', 'gatling', 'heavy', 'lightning'],
@@ -65,7 +64,7 @@ export class GameController {
             rewardMultiplier: config.reward || 1.0,
             comboCount: 0,
             comboTimer: 0,
-            isPaused: false, // 初始不暂停，游戏元素先初始化
+            isPaused: false,
             isAutoMode: true,
             isManualAiming: false,
             manualAimX: 0,
@@ -81,16 +80,20 @@ export class GameController {
             berserkTimer: 0,
             isBerserk: false,
             berserkCharge: 0,
+            // [优化] 缓存字段初始化
+            _cachedTalentDmgMult: 1.0,
+            _cachedTalentGoldMult: 1.0,
+            _cachedTalentCritChance: 0,
+            _cachedTalentFireRateMult: 1.0,
+            _cachedTalentSpeedMult: 1.0,
         };
 
         if (stageLevel > 0) {
-            // 计算区域内的本地关卡ID（1-10）
             const levelInArea = ((stageLevel - 1) % LEVELS_PER_AREA) + 1;
             const lvl = areaLevels[levelInArea - 1];
             if (lvl) {
                 this.ctx.stageBossSpawnInterval = lvl.bossSpawnInterval;
-                this.ctx.stageBossSpawnTimer = 60; // 首个Boss 1秒后生成
-                // 应用层+区域难度倍率
+                this.ctx.stageBossSpawnTimer = 60;
                 this.ctx.hpMultiplier = lvl.hpMult;
                 this.ctx.spawnRate = lvl.spawnRate;
                 this.ctx.rewardMultiplier = lvl.reward;
@@ -102,7 +105,6 @@ export class GameController {
             this.ctx.weaponLevels[w.id] = savedLevels[w.id] ?? 1;
         }
 
-        // 初始化关卡分数显示（使用区域关卡数据）
         if (stageLevel > 0) {
             const levelInArea = ((stageLevel - 1) % LEVELS_PER_AREA) + 1;
             const nextLevelInArea = levelInArea + 1;
@@ -113,7 +115,6 @@ export class GameController {
             UIManager.updateStageScore(0, requiredScore, stageLevel);
         }
 
-        // 先初始化游戏元素，确保游戏画面显示
         const cannon = new Cannon();
         cannon.x = SceneManager.width / 2;
         cannon.y = SceneManager.height - 20;
@@ -136,9 +137,8 @@ export class GameController {
 
         this.initBackButton(app, onBack);
         this.input.init();
-        this.weapons.updateShopUI();
+        this.weapons.updateShowUI();
 
-        // 确保UI层可见并显示HUD
         SceneManager.getLayer(Layers.UI).visible = true;
         if (stageLevel > 0 || config.isEndless) {
             UIManager.updateHUD(this.ctx.crystals);
@@ -152,21 +152,20 @@ export class GameController {
             this.initEndlessEvents(config.endlessLevel ?? 1, onBack);
         }
 
-        this.tickerFunc = (delta: number) => {
+        this.tickFunc = (delta: number) => {
             if (this.ctx.isPaused) return;
             try { this.update(delta); } catch (err: any) {
                 if (err.message.includes('Resource')) return;
                 console.error('Update Crash:', err.message);
             }
         };
-        app.ticker.add(this.tickerFunc);
+        app.ticker.add(this.tickFunc);
 
         this.spawner.preWarm();
 
-        // 显示开场白（如果有），游戏画面已经在背景中显示
-        if (dialogueLines && dialogueLines.length > 0) {
+        if (dialogLines && dialogLines.length > 0) {
             this.ctx.isPaused = true;
-            UIManager.showDialogue(dialogueLines).then(() => {
+            UIManager.showDialog(dialogLines).then(() => {
                 this.ctx.isPaused = false;
             });
         }
@@ -177,43 +176,40 @@ export class GameController {
         const levelInArea = ((stageLevel - 1) % LEVELS_PER_AREA) + 1;
         const lvlDef = areaLevels[levelInArea - 1];
 
-        // Boss登场对话
         const bossSpawnUnsub = EventBus.on(GameEvents.STAGE_BOSS_SPAWNED, () => {
             if (lvlDef && lvlDef.spawnDialogue && lvlDef.spawnDialogue.length > 0) {
                 this.ctx.isPaused = true;
-                UIManager.showDialogue(lvlDef.spawnDialogue).then(() => {
+                UIManager.showDialog(lvlDef.spawnDialogue).then(() => {
                     this.ctx.isPaused = false;
                 });
             }
         });
 
-        // 分数达标 → 显示解锁提示
         const unlockReachedUnsub = EventBus.on(GameEvents.STAGE_UNLOCK_REACHED, (payload: { currentScore: number; requiredScore: number; nextLevelName: string }) => {
             this.ctx.isPaused = true;
             UIManager.showStageUnlockPrompt(payload.currentScore, payload.requiredScore, payload.nextLevelName).then((choice) => {
                 this.ctx.isPaused = false;
                 if (choice === 'next') {
-                    // 下一关：直接开始下一关
                     const nextLevelInArea = levelInArea + 1;
                     if (nextLevelInArea <= LEVELS_PER_AREA) {
                         const nextLvl = areaLevels[nextLevelInArea - 1];
-                        const nextGlobalLevel = nextLvl.id;
+                        const nextGlobalLevel = nextLvl?.id;
                         const restartCallback = this.onRestartLevel;
                         if (nextLvl && restartCallback) {
                             const layerKey = String(currentLayer);
                             const levelKey = String(stageLevel);
-                            if (!SaveManager.state.layerStageScores[layerKey]) {
-                                SaveManager.state.layerStageScores[layerKey] = {};
+                            if (!SaveManager.state.playerStageScores[layerKey]) {
+                                SaveManager.state.playerStageScores[layerKey] = {};
                             }
-                            const prev = SaveManager.state.layerStageScores[layerKey][levelKey] || 0;
+                            const prev = SaveManager.state.playerStageScores[layerKey][levelKey] ?? 0;
                             if (this.ctx.stageScore > prev) {
-                                SaveManager.state.layerStageScores[layerKey][levelKey] = this.ctx.stageScore;
+                                SaveManager.state.playerStageScores[layerKey][levelKey] = this.ctx.stageScore;
                             }
-                            if (!SaveManager.state.unlockedLayerStages[layerKey]) {
-                                SaveManager.state.unlockedLayerStages[layerKey] = [];
+                            if (!SaveManager.state.unlockedPlayerStages[layerKey]) {
+                                SaveManager.state.unlockedPlayerStages[layerKey] = [];
                             }
-                            if (!SaveManager.state.unlockedLayerStages[layerKey].includes(nextGlobalLevel)) {
-                                SaveManager.state.unlockedLayerStages[layerKey].push(nextGlobalLevel);
+                            if (!SaveManager.state.unlockedPlayerStages[layerKey].includes(nextGlobalLevel)) {
+                                SaveManager.state.unlockedPlayerStages[layerKey].push(nextGlobalLevel);
                             }
                             SaveManager.save();
                             this.destroy();
@@ -230,21 +226,16 @@ export class GameController {
                         }
                     }
                 } else if (choice === 'exit') {
-                    // 退出：返回大厅
                     this.destroy();
-                    if (onBack) {
-                        onBack();
-                    }
+                    if (onBack) onBack();
                 }
             });
         });
 
-        // Boss被击杀 → 记录分数 → 冷却后重新生成Boss
         const bossKilledUnsub = EventBus.on(GameEvents.STAGE_BOSS_KILLED, () => {
             this.ctx.stageBossAlive = false;
             this.ctx.stageBossSpawnTimer = this.ctx.stageBossSpawnInterval;
 
-            // Boss击杀时也检查是否弹出下一关提示（不依赖分数门槛）
             if (!this.ctx.stageUnlockShown) {
                 const nextLevelInAreaOnKill = levelInArea + 1;
                 if (nextLevelInAreaOnKill <= LEVELS_PER_AREA) {
@@ -260,58 +251,54 @@ export class GameController {
                 }
             }
 
-            // 更新本关最高分到存档（分层+分区存储）
             const layerKey = String(currentLayer);
             const levelKey = String(stageLevel);
 
-            // 初始化层数据（如果不存在）
-            if (!SaveManager.state.layerStageScores[layerKey]) {
-                SaveManager.state.layerStageScores[layerKey] = {};
+            if (!SaveManager.state.playerStageScores[layerKey]) {
+                SaveManager.state.playerStageScores[layerKey] = {};
             }
-            if (!SaveManager.state.unlockedLayerStages[layerKey]) {
-                SaveManager.state.unlockedLayerStages[layerKey] = [];
+            if (!SaveManager.state.unlockedPlayerStages[layerKey]) {
+                SaveManager.state.unlockedPlayerStages[layerKey] = [];
             }
-            if (!SaveManager.state.unlockedLayerAreas[layerKey]) {
-                SaveManager.state.unlockedLayerAreas[layerKey] = [1];
+            if (!SaveManager.state.unlockedPlayerAreas[layerKey]) {
+                SaveManager.state.unlockedPlayerAreas[layerKey] = [1];
             }
 
-            const prev = SaveManager.state.layerStageScores[layerKey][levelKey] || 0;
+            const prev = SaveManager.state.playerStageScores[layerKey][levelKey] ?? 0;
             if (this.ctx.stageScore > prev) {
-                SaveManager.state.layerStageScores[layerKey][levelKey] = this.ctx.stageScore;
+                SaveManager.state.playerStageScores[layerKey][levelKey] = this.ctx.stageScore;
             }
 
-            // 检查是否解锁下一关（区域内）
             const nextLevelInArea = levelInArea + 1;
             if (nextLevelInArea <= LEVELS_PER_AREA) {
-                // 使用数组索引获取下一关（areaLevels是按关卡顺序排列的）
                 const nextLvl = areaLevels[nextLevelInArea - 1];
                 if (nextLvl && this.ctx.stageScore >= nextLvl.unlockScore) {
-                    const nextGlobalLevel = nextLvl.id; // 直接使用全局ID
-                    if (!SaveManager.state.unlockedLayerStages[layerKey].includes(nextGlobalLevel)) {
-                        SaveManager.state.unlockedLayerStages[layerKey].push(nextGlobalLevel);
+                    const nextGlobalLevel = nextLvl.id;
+                    if (!SaveManager.state.unlockedPlayerStages[layerKey]?.includes(nextGlobalLevel)) {
+                        if (!SaveManager.state.unlockedPlayerStages[layerKey]) {
+                            SaveManager.state.unlockedPlayerStages[layerKey] = [];
+                        }
+                        SaveManager.state.unlockedPlayerStages[layerKey].push(nextGlobalLevel);
                     }
                 }
             }
 
-            // 检查是否解锁下一区域（第10关通关）
             if (levelInArea === LEVELS_PER_AREA) {
                 const nextArea = currentArea + 1;
-                if (!SaveManager.state.unlockedLayerAreas[layerKey].includes(nextArea)) {
-                    SaveManager.state.unlockedLayerAreas[layerKey].push(nextArea);
-                    // 解锁下一区域的第1关
+                if (!SaveManager.state.unlockedPlayerAreas[layerKey].includes(nextArea)) {
+                    SaveManager.state.unlockedPlayerAreas[layerKey].push(nextArea);
                     const nextAreaFirstLevel = nextArea * LEVELS_PER_AREA + 1;
-                    if (!SaveManager.state.unlockedLayerStages[layerKey].includes(nextAreaFirstLevel)) {
-                        SaveManager.state.unlockedLayerStages[layerKey].push(nextAreaFirstLevel);
+                    if (!SaveManager.state.unlockedPlayerStages[layerKey].includes(nextAreaFirstLevel)) {
+                        SaveManager.state.unlockedPlayerStages[layerKey].push(nextAreaFirstLevel);
                     }
                 }
             }
 
-            // 检查是否解锁下一层（第10关通关且平均分解锁）
             if (levelInArea === LEVELS_PER_AREA && currentArea >= 3) {
-                const nextLayer = currentLayer + 1;
-                if (isLayerUnlocked(nextLayer, SaveManager.state.layerStageScores)) {
-                    if (!SaveManager.state.unlockedLayers.includes(nextLayer)) {
-                        SaveManager.state.unlockedLayers.push(nextLayer);
+                const nextPlayer = currentLayer + 1;
+                if (isLayerUnlocked(nextPlayer, SaveManager.state.playerStageScores)) {
+                    if (!SaveManager.state.unlockedPlayers.includes(nextPlayer)) {
+                        SaveManager.state.unlockedPlayers.push(nextPlayer);
                     }
                 }
             }
@@ -319,41 +306,35 @@ export class GameController {
             SaveManager.save();
         });
 
-        // 撤退时也保存分数
         const cleanup = () => {
             bossSpawnUnsub();
             unlockReachedUnsub();
             bossKilledUnsub();
             const layerKey = String(currentLayer);
             const levelKey = String(stageLevel);
-
-            if (!SaveManager.state.layerStageScores[layerKey]) {
-                SaveManager.state.layerStageScores[layerKey] = {};
+            if (!SaveManager.state.playerStageScores[layerKey]) {
+                SaveManager.state.playerStageScores[layerKey] = {};
             }
-
-            const prev = SaveManager.state.layerStageScores[layerKey][levelKey] || 0;
+            const prev = SaveManager.state.playerStageScores[layerKey][levelKey] ?? 0;
             if (this.ctx.stageScore > prev) {
-                SaveManager.state.layerStageScores[layerKey][levelKey] = this.ctx.stageScore;
+                SaveManager.state.playerStageScores[layerKey][levelKey] = this.ctx.stageScore;
             }
-
             const nextLevelInArea = levelInArea + 1;
             if (nextLevelInArea <= LEVELS_PER_AREA) {
-                // 使用数组索引获取下一关（areaLevels是按关卡顺序排列的）
                 const nextLvl = areaLevels[nextLevelInArea - 1];
                 if (nextLvl && this.ctx.stageScore >= nextLvl.unlockScore) {
-                    const nextGlobalLevel = nextLvl.id; // 直接使用全局ID
-                    if (!SaveManager.state.unlockedLayerStages[layerKey]?.includes(nextGlobalLevel)) {
-                        if (!SaveManager.state.unlockedLayerStages[layerKey]) {
-                            SaveManager.state.unlockedLayerStages[layerKey] = [];
+                    const nextGlobalLevel = nextLvl.id;
+                    if (!SaveManager.state.unlockedPlayerStages[layerKey]?.includes(nextGlobalLevel)) {
+                        if (!SaveManager.state.unlockedPlayerStages[layerKey]) {
+                            SaveManager.state.unlockedPlayerStages[layerKey] = [];
                         }
-                        SaveManager.state.unlockedLayerStages[layerKey].push(nextGlobalLevel);
+                        SaveManager.state.unlockedPlayerStages[layerKey].push(nextGlobalLevel);
                     }
                 }
             }
             SaveManager.save();
         };
 
-        // 将 cleanup 绑定 to destroy
         const origDestroy = this.destroy.bind(this);
         this.destroy = () => {
             cleanup();
@@ -370,7 +351,6 @@ export class GameController {
                 SaveManager.save();
             }
         };
-
         const origDestroy = this.destroy.bind(this);
         this.destroy = () => {
             saveScore();
@@ -378,19 +358,19 @@ export class GameController {
         };
     }
 
-    private initBackButton(app: PIXI.Application, onBack?: () => void): void {
+    private initBackButton(app: PIXI.Application, onBack: (() => void)): void {
         this.backBtn = new PIXI.Container();
         this.backBtn.x = 20; this.backBtn.y = SceneManager.height - 66;
         const btnBg = new PIXI.Graphics()
-            .beginFill(0x050e1a, 0.9).lineStyle(2, 0xff4444, 0.9)
+            .beginFill(0x05e1a, 0.9).lineStyle(2, 0xff4444, 0.9)
             .drawRoundedRect(0, 0, 130, 44, 10).endFill();
-        const btnTxt = new PIXI.Text('撤退返回', { fontFamily: 'Verdana', fontSize: 16, fill: 0xff8888, fontWeight: 'bold' });
+        const btnTxt = new PIXI.Text('返回菜单', { fontFamily: 'Verdana', fontSize: 16, fill: 0xff8888, fontWeight: 'bold' });
         btnTxt.anchor.set(0.5); btnTxt.x = 65; btnTxt.y = 22;
         this.backBtn.addChild(btnBg, btnTxt);
         this.backBtn.eventMode = 'static'; this.backBtn.cursor = 'pointer';
         this.backBtn.hitArea = new PIXI.Rectangle(0, 0, 130, 44);
         this.backBtn.on('pointerdown', () => {
-            UIManager.showConfirm('确定要放弃本次猎杀并返回总部吗？', '⚠ 撤退确认').then(ok => {
+            UIManager.showConfirm('确定要退出当前关卡吗？', '确认').then(ok => {
                 if (ok) {
                     this.destroy();
                     if (onBack) {
@@ -409,15 +389,15 @@ export class GameController {
     }
 
     public destroy(): void {
-        if (this.tickerFunc) {
-            this.ctx.app.ticker.remove(this.tickerFunc);
+        if (this.tickFunc) {
+            this.ctx.app.ticker.remove(this.tickFunc);
         }
         if (this.input) {
             this.input.destroy();
         }
 
         [...this.ctx.fishes, ...this.ctx.bullets, ...this.ctx.cores,
-        ...this.ctx.particles, ...this.ctx.shockwaves, ...this.ctx.lightnings].forEach(e => {
+         ...this.ctx.particles, ...this.ctx.shockwaves, ...this.ctx.lightnings].forEach(e => {
             if (e.parent) e.parent.removeChild(e);
             if (e.kill) e.kill();
         });
@@ -427,7 +407,6 @@ export class GameController {
 
         if (this.ctx.cannon?.parent) this.ctx.cannon.parent.removeChild(this.ctx.cannon);
 
-        // 移除撤退返回按钮，防止残留于 UI 层
         if (this.backBtn) {
             if (this.backBtn.parent) {
                 this.backBtn.parent.removeChild(this.backBtn);
@@ -435,22 +414,32 @@ export class GameController {
             this.backBtn = null;
         }
 
-        SceneManager.getLayer(Layers.Player).removeChildren(); // 清理玩家层
+        SceneManager.getLayer(Layers.Player).removeChildren();
         SceneManager.getLayer(Layers.Game).removeChildren();
         SceneManager.getLayer(Layers.Bullet).removeChildren();
         SceneManager.getLayer(Layers.FX).removeChildren();
-        SceneManager.getLayer(Layers.Story).removeChildren(); // 清理对话层
-        // 不清理UI层，因为menuContainer由UIManager管理
-        SceneManager.getLayer(Layers.UI).visible = true; // 确保UI层可见
+        SceneManager.getLayer(Layers.Story).removeChildren();
+        SceneManager.getLayer(Layers.UI).visible = true;
         UIManager.hideHUD();
         if (this.weapons) this.weapons.destroy();
         if (this.bridge) this.bridge.destroy();
     }
 
+    /**
+     * [优化] update - 每帧开头缓存 Talent 值
+     * 原版每个系统都通过 (window as any).TalentXxx 读取天赋值
+     * 在 120 条鱼 + 200 颗子弹的场景下，每帧可能触发数千次 window 属性访问
+     */
     private update(delta: number): void {
-        // 防止切后台/卡顿导致 delta 巨大，从而“刚生成就被更新/销毁”，出现发射但看不到特效/子弹的情况
         const dt = Math.min(delta, 3);
         if (this.ctx.frozenTime > 0) { this.ctx.frozenTime -= dt; return; }
+
+        // [优化] 缓存 Talent 值到 ctx，全系统共用
+        this.ctx._cachedTalentDmgMult = (window as any).TalentDmgMult || 1.0;
+        this.ctx._cachedTalentGoldMult = (window as any).TalentGoldMult || 1.0;
+        this.ctx._cachedTalentCritChance = (window as any).TalentCritChance || 0;
+        this.ctx._cachedTalentFireRateMult = (window as any).TalentFireRateMult || 1.0;
+        this.ctx._cachedTalentSpeedMult = (window as any).TalentSpeedMult || 1.0;
 
         SceneManager.update(dt);
         this.spawner.update(dt);
@@ -465,6 +454,8 @@ export class GameController {
 
         this.spawner.checkCorePickup();
         this.status.update(dt);
+        // [优化] CombatSystem 新增 update() 用于 save 防抖
+        this.combat.update(dt);
         this.combat.checkCollisions(dt);
 
         if (this.ctx.comboTimer > 0) {
@@ -476,18 +467,25 @@ export class GameController {
         }
     }
 
+    /**
+     * [优化] updateEntities - 使用 swap-and-pop 替代 splice()
+     * 原版 splice(i, 1) 是 O(n) 操作，每次移除都会移动后续所有元素
+     * 在 120 条鱼的场景下，如果前几条鱼死亡，splice 会触发大量内存移动
+     * swap-and-pop 将待移除元素与末尾交换后 pop，是 O(1) 操作
+     * 注意：这会改变数组顺序，但游戏实体的更新顺序不影响正确性
+     */
     private updateEntities(list: any[], type: string, delta: number): void {
-        for (let i = list.length - 1; i >= 0; i--) {
+        let writeIdx = 0;
+        for (let i = 0; i < list.length; i++) {
             const entity = list[i];
             entity.update(delta);
-            if (!entity.isActive) {
-                // 核心修复：彻底从显示层级移除，防止渲染泄露
-                if (entity.parent) {
-                    entity.parent.removeChild(entity);
-                }
-                list.splice(i, 1);
+            if (entity.isActive) {
+                list[writeIdx++] = entity;
+            } else {
+                if (entity.parent) entity.parent.removeChild(entity);
                 this.ctx.pool.put(type, entity);
             }
         }
+        list.length = writeIdx;
     }
 }

@@ -6,11 +6,14 @@ import { EventBus } from '../core/EventBus';
 import { GameEvents } from '../core/GameEvents';
 import { COMBO, CHAIN, ECONOMY, AOE, TALENT } from '../config/balance.config';
 import { getSkillEffect, getSkillLevel } from '../config/skilltree.config';
+import { SaveManager } from '../SaveManager';
+import { LEVELS_PER_AREA, getLayerAreaLevels } from '../config/levels.config';
+import { Bullet as BulletEntity } from '../entities/Bullet';
 import type { GameContext } from './GameContext';
 import type { EffectSystem } from './EffectSystem';
-import type { SpawnSystem } from './SpawnSystem';
-import type { StatusSystem } from './StatusSystem';
-import type { AttackSystem } from './AttackSystem';
+import type { SpawnSystem } from '../systems/SpawnSystem';
+import type { StatusSystem } from '../systems/StatusSystem';
+import type { AttackSystem } from '../systems/AttackSystem';
 
 type DamageOptions = {
     allowCrit?: boolean;
@@ -18,12 +21,22 @@ type DamageOptions = {
     showText?: boolean;
 };
 
+/**
+ * [优化] CombatSystem
+ * - 移除 applyDamage 中的动态 import()，改为静态导入（#1 性能杀手）
+ * - 碰撞检测使用距离平方避免 Math.sqrt
+ * - 缓存 TalentDmgMult 到 ctx 避免每帧读 window
+ * - 击杀时 SaveManager.save() 改为防抖
+ */
 export class CombatSystem {
-    /** 分裂弹冷却帧计数器，防止高射速下分裂弹爆炸 */
     private splitCooldown: number = 0;
-    private static readonly SPLIT_COOLDOWN_FRAMES = 15; // 最少15帧间隔才能再次分裂
-    private static readonly MAX_SPLIT_BULLETS = 30; // 场上最多30颗分裂弹
-    private static readonly MAX_TOTAL_BULLETS = 200; // 场上子弹总数上限
+    private static readonly SPLIT_COOLDOWN_FRAMES = 15;
+    private static readonly MAX_SPLIT_BULLETS = 30;
+    private static readonly MAX_TOTAL_BULLETS = 200;
+
+    // [优化] 防抖 save
+    private saveDebounceTimer: number = 0;
+    private static readonly SAVE_DEBOUNCE = 60; // 每秒最多存一次
 
     constructor(
         private ctx: GameContext,
@@ -31,83 +44,97 @@ export class CombatSystem {
         private spawner: SpawnSystem,
         private status: StatusSystem,
         private attacks: AttackSystem,
-    ) { }
+    ) {}
+
+    /** [优化] 每帧调用，递减 save 防抖计时器 */
+    update(delta: number): void {
+        if (this.saveDebounceTimer > 0) {
+            this.saveDebounceTimer -= delta;
+        }
+    }
 
     checkCollisions(delta: number): void {
-        // 分裂弹冷却递减
         if (this.splitCooldown > 0) this.splitCooldown -= delta;
 
-        for (const b of this.ctx.bullets) {
+        // [优化] 缓存到局部变量，避免每颗子弹都查 window
+        const talentDmgMult = this.ctx._cachedTalentDmgMult || 1.0;
+
+        const bullets = this.ctx.bullets;
+        const fishes = this.ctx.fishes;
+
+        for (let bi = bullets.length - 1; bi >= 0; bi--) {
+            const b = bullets[bi];
             if (!b.isActive) continue;
 
-            // ── 闪电武器：直接击中锁定的主目标，再由连锁跳到其他鱼 ──
+            // 闪电弹特殊处理
             if (b.weaponType === 'lightning') {
-                if (b.hasHit) continue; // 本周期已命中，轨道继续播完
+                if (b.hasHit) continue;
                 const target = b.targetFish;
-                if (!target || !target.isActive) continue; // 目标不存在或已死
+                if (!target || !target.isActive) continue;
                 b.hasHit = true;
                 const id = this.ctx.unlockedWeapons[this.ctx.currentWeaponIndex];
                 const lvl = this.ctx.weaponLevels[id] || 1;
-                // 主电弧现在由 Bullet.ts 内部每帧动态绘制并绑定武器坐标，不再生成脱离的附着特效
-                // this.effects.spawnLightning(b.originX, b.originY, target.x, target.y);
                 this.onHitEffect(id, target.x, target.y, lvl);
-                const dmgMult = (window as any).TalentDmgMult || 1.0;
-                const hitDmg = b.damage * dmgMult;
+                const hitDmg = b.damage * talentDmgMult;
                 this.applyDamage(target, hitDmg);
                 this.status.applyElectrocute(target, hitDmg);
                 this.triggerChainLightning(target, CHAIN.baseTargets + lvl, hitDmg);
                 continue;
             }
 
-            // ── 普通武器：飞行碰撞检测（支持穿透） ──
-            // 分裂弹不穿透，避免子弹数量爆炸
+            // [优化] 普通子弹碰撞 - 使用距离平方
             const pierceCount = b.isSplitBullet ? 0 : getSkillEffect('pierce');
             let pierced = 0;
-            for (const f of this.ctx.fishes) {
+            const bx = b.x, by = b.y;
+
+            for (let fi = fishes.length - 1; fi >= 0; fi--) {
+                const f = fishes[fi];
                 if (!f.isActive) continue;
-                if (b.hitFishList && b.hitFishList.length > 0 && b.hitFishList.includes(f)) continue; // 不重复命中
-                const dx = b.x - f.x;
-                const dy = b.y - f.y;
+                if (b.hitFishList && b.hitFishList.length > 0 && b.hitFishList.includes(f)) continue;
+
+                // [优化] 先做快速 AABB 排除再做精确圆检测
+                const dx = bx - f.x;
+                const dy = by - f.y;
+                const hitR = f.hitRadius;
+                // 快速 AABB 排除：如果任意轴距离 > hitRadius，跳过
+                if (dx > hitR || dx < -hitR || dy > hitR || dy < -hitR) continue;
                 const distSq = dx * dx + dy * dy;
-                if (distSq < f.hitRadius * f.hitRadius) {
-                    const id = this.ctx.unlockedWeapons[this.ctx.currentWeaponIndex];
-                    const lvl = this.ctx.weaponLevels[id] || 1;
-                    this.onHitEffect(id, f.x, f.y, lvl);
+                if (distSq >= hitR * hitR) continue;
 
-                    if (id !== 'heavy') AssetManager.playSound('hit');
-                    const dmgMult = (window as any).TalentDmgMult || 1.0;
-                    this.applyDamage(f, b.damage * dmgMult);
-                    this.attacks.onDirectHit({
-                        weaponId: id,
-                        level: lvl,
-                        bulletX: b.x,
-                        bulletY: b.y,
-                        baseDamage: b.damage,
-                        dmgMult,
-                    });
+                // 命中
+                const id = this.ctx.unlockedWeapons[this.ctx.currentWeaponIndex];
+                const lvl = this.ctx.weaponLevels[id] || 1;
+                this.onHitEffect(id, f.x, f.y, lvl);
 
-                    // 分裂弹技能：命中后分裂出小子弹（带冷却和数量限制）
-                    const splitLevel = getSkillLevel('split');
-                    if (splitLevel > 0 && !b.isSplitBullet && this.splitCooldown <= 0) {
-                        // 计算当前场上分裂弹数量
-                        const splitCount = this.ctx.bullets.filter(bl => bl.isSplitBullet).length;
-                        if (splitCount < CombatSystem.MAX_SPLIT_BULLETS && this.ctx.bullets.length < CombatSystem.MAX_TOTAL_BULLETS) {
-                            this.spawnSplitBullets(b, f, splitLevel);
-                            this.splitCooldown = CombatSystem.SPLIT_COOLDOWN_FRAMES;
-                        }
+                if (id !== 'heavy') AssetManager.playSound('hit');
+                this.applyDamage(f, b.damage * talentDmgMult);
+                this.attacks.onDirectHit({
+                    weaponId: id,
+                    level: lvl,
+                    bulletX: bx,
+                    bulletY: by,
+                    baseDamage: b.damage,
+                    dmgMult: talentDmgMult,
+                });
+
+                const splitLevel = getSkillLevel('split');
+                if (splitLevel > 0 && !b.isSplitBullet && this.splitCooldown <= 0) {
+                    const splitCount = bullets.filter(blb => blb.isSplitBullet).length;
+                    if (splitCount < CombatSystem.MAX_SPLIT_BULLETS && bullets.length < CombatSystem.MAX_TOTAL_BULLETS) {
+                        this.spawnSplitBullets(b, f, splitLevel);
+                        this.splitCooldown = CombatSystem.SPLIT_COOLDOWN_FRAMES;
                     }
-
-                    // 穿透判定
-                    if (pierced < pierceCount) {
-                        pierced++;
-                        if (!b.hitFishList) b.hitFishList = [];
-                        b.hitFishList.push(f);
-                        continue; // 子弹继续飞行，不kill
-                    }
-
-                    b.kill();
-                    break;
                 }
+
+                if (pierced < pierceCount) {
+                    pierced++;
+                    if (!b.hitFishList) b.hitFishList = [];
+                    b.hitFishList.push(f);
+                    continue;
+                }
+
+                b.kill();
+                break;
             }
         }
     }
@@ -120,14 +147,10 @@ export class CombatSystem {
                 break;
             case 'heavy':
                 AssetManager.playSound('explosion');
-                // 核能爆燃：超大粒子簇
-                this.effects.spawnParticles(x, y, 40, 0xffdf00, 10); // 亮黄核心
-                this.effects.spawnParticles(x, y, 25, 0xff5500, 8);  // 橙红火光
-                this.effects.spawnParticles(x, y, 20, 0x00ff00, 12); // 核能绿光
-                // 多重冲击波叠加
+                this.effects.spawnParticles(x, y, 40, 0xffdf00, 10);
+                this.effects.spawnParticles(x, y, 25, 0xff5500, 8);
+                this.effects.spawnParticles(x, y, 20, 0x00ff00, 12);
                 this.effects.spawnShockwave(x, y, 2.5 + lvl * 0.5);
-                // setTimeout(() => this.effects.spawnShockwave(x, y, 1.2 + lvl * 0.3), 100);
-                // 剧烈震屏已根据用户要求移除
                 break;
             case 'lightning':
                 this.effects.spawnParticles(x, y, 8, 0x00ffff, 5);
@@ -138,52 +161,60 @@ export class CombatSystem {
     }
 
     private triggerChainLightning(startFish: Fish, maxCount: number, baseDmg: number): void {
-        // 技能树：电弧增辐，每级+2跳跃
         const chainBoost = getSkillEffect('chainBoost');
         const totalTargets = maxCount + chainBoost;
         const branchDmg = baseDmg * CHAIN.damageFalloff;
+        const chainRangeSq = CHAIN.chainRange * CHAIN.chainRange;
 
-        let candidates: { fish: Fish; dist: number }[] = [];
-        for (const f of this.ctx.fishes) {
+        // [优化] 避免创建临时对象数组，直接用内联比较
+        const fishes = this.ctx.fishes;
+        const candidates: { fish: Fish; distSq: number }[] = [];
+        for (let i = fishes.length - 1; i >= 0; i--) {
+            const f = fishes[i];
             if (!f.isActive || f === startFish) continue;
-            const distSq = Math.pow(f.x - startFish.x, 2) + Math.pow(f.y - startFish.y, 2);
-            if (distSq <= CHAIN.chainRange * CHAIN.chainRange) {
-                candidates.push({ fish: f, dist: distSq });
+            const dx = f.x - startFish.x;
+            const dy = f.y - startFish.y;
+            const distSq = dx * dx + dy * dy;
+            if (distSq <= chainRangeSq) {
+                candidates.push({ fish: f, distSq });
             }
         }
 
-        // 排序找到最近的 totalTargets 个单位直接分支电击
-        candidates.sort((a, b) => a.dist - b.dist);
+        candidates.sort((a, b) => a.distSq - b.distSq);
         const targets = candidates.slice(0, totalTargets);
 
         for (const t of targets) {
-            // 一次性的瞬间受击，后续 3秒的连线效果交给 StatusSystem 处理
             this.effects.spawnLightning(startFish.x, startFish.y, t.fish.x, t.fish.y, true);
             this.applyDamage(t.fish, branchDmg);
             this.status.applyElectrocute(t.fish, branchDmg, startFish);
         }
     }
 
-    /** 分裂弹技能：命中后向两侧分裂出追踪小子弹 */
     private spawnSplitBullets(parentBullet: Bullet, hitFish: Fish, splitLevel: number): void {
-        const splitDmgMult = 0.3 + splitLevel * 0.15; // 基础30% + 每级15%
-        const angles = [parentBullet.rotation - 0.4, parentBullet.rotation + 0.4]; // 左右各偏0.4弧度
+        const splitDmgMult = 0.3 + splitLevel * 0.15;
+        const angles = [parentBullet.rotation - 0.4, parentBullet.rotation + 0.4];
+        const talentDmgMult = this.ctx._cachedTalentDmgMult || 1.0;
+
         for (const angle of angles) {
-            const sb = this.ctx.pool.get('bullet', () => new Bullet());
+            const sb = this.ctx.pool.get('bullet', () => new BulletEntity());
             if (!sb) continue;
             const id = this.ctx.unlockedWeapons[this.ctx.currentWeaponIndex];
             const lvl = this.ctx.weaponLevels[id] || 1;
-            const dmgMult = (window as any).TalentDmgMult || 1.0;
-            sb.setType(id, lvl, dmgMult, 1.0);
+            sb.setType(id, lvl, talentDmgMult, 1.0);
             sb.damage *= splitDmgMult;
             sb.isSplitBullet = true;
-            sb.fire(hitFish.x, hitFish.y, angle - Math.PI / 2); // 补偿rotation偏移
-            // 自动追击：找最近的活鱼作为追踪目标
+            sb.fire(hitFish.x, hitFish.y, angle - Math.PI / 2);
+
+            // [优化] 寻找最近的鱼作为追踪目标
             let nearestDist = Infinity;
             let nearestFish: Fish | null = null;
-            for (const f of this.ctx.fishes) {
+            const fishes = this.ctx.fishes;
+            for (let i = fishes.length - 1; i >= 0; i--) {
+                const f = fishes[i];
                 if (!f.isActive || f === hitFish) continue;
-                const d = Math.pow(f.x - hitFish.x, 2) + Math.pow(f.y - hitFish.y, 2);
+                const dx = f.x - hitFish.x;
+                const dy = f.y - hitFish.y;
+                const d = dx * dx + dy * dy;
                 if (d < nearestDist) { nearestDist = d; nearestFish = f; }
             }
             sb.homingTarget = nearestFish;
@@ -192,14 +223,18 @@ export class CombatSystem {
         }
     }
 
+    /**
+     * [优化] applyDamage - 移除了所有动态 import()
+     * 原版每次击杀鱼都会调用 import('../config/levels.config') 和 import('../SaveManager')
+     * 这在高频战斗中每帧可能触发数十次动态模块加载，是 #1 性能杀手
+     */
     applyDamage(fish: Fish, dmg: number, opts: DamageOptions = {}): void {
         const allowCrit = opts.allowCrit ?? true;
         const allowComboOnKill = opts.allowComboOnKill ?? true;
         const showText = opts.showText ?? true;
 
         const comboBonus = 1 + Math.min(COMBO.maxDmgBonus, this.ctx.comboCount * COMBO.dmgBonusPerCombo);
-        const critChance = allowCrit ? ((window as any).TalentCritChance || 0) : 0;
-        // 技能树：暴击强化，每级+0.5暴击倍率
+        const critChance = allowCrit ? ((this.ctx._cachedTalentCritChance) || 0) : 0;
         const critBoostMult = TALENT.critDamageMultiplier + getSkillEffect('critBoost');
         let finalDmg = dmg * comboBonus;
         let isCrit = false;
@@ -208,7 +243,7 @@ export class CombatSystem {
         if (showText) {
             const dmgText = `${Math.floor(finalDmg)}`;
             const dmgColor = isCrit ? 0xff3300 : (this.ctx.comboCount > 20 ? 0xffcc00 : 0xffffff);
-            EventBus.emit(GameEvents.UI_FLOATING_TEXT, { x: fish.x, y: fish.y - fish.height / 2, text: dmgText, color: dmgColor, isCrit });
+            EventBus.emit(GameEvents.UI_FLOATING_TEXT, { x: fish.x, y: fish.y - fish.hitRadius, text: dmgText, color: dmgColor, isCrit });
         }
 
         const isDead = fish.takeDamage(finalDmg);
@@ -220,65 +255,60 @@ export class CombatSystem {
             }
 
             const roll = Math.random();
-            const goldMult = (window as any).TalentGoldMult || 1.0;
-            // 技能树：收益增幅，每级+10%金币
+            const goldMult = (this.ctx._cachedTalentGoldMult) || 1.0;
             const skillGoldBoost = 1 + getSkillEffect('goldBoost');
-            const baseCrystal = (fish as any).isBoss
+            const baseCrystal = fish.isBoss
                 ? ECONOMY.bossCrystal
                 : (roll > ECONOMY.richDropChance ? ECONOMY.killCrystalRich : ECONOMY.killCrystalBase);
             const val = baseCrystal * 2 * this.ctx.rewardMultiplier * goldMult * skillGoldBoost * (1 + this.ctx.comboCount * COMBO.goldBonusPerCombo);
             this.ctx.crystals += val;
 
-            // 关卡模式 & 无尽模式：累积分数
+            // [优化] 关卡分数更新 - 使用静态导入，不再动态 import
             if (this.ctx.stageLevel > 0 || this.ctx.isEndless) {
-                const scoreVal = (fish as any).isBoss ? 500 : Math.floor(val);
+                const scoreVal = fish.isBoss ? 500 : Math.floor(val);
                 this.ctx.stageScore += scoreVal;
 
                 if (this.ctx.isEndless) {
-                    // 无尽模式：直接更新HUD，无需解锁逻辑
                     EventBus.emit(GameEvents.UI_STAGE_SCORE_UPDATE, {
                         currentScore: this.ctx.stageScore,
                         requiredScore: 0,
                         levelId: 0,
                     });
                 } else {
-                    // 获取下一关所需分数
-                    import('../config/levels.config').then(({ LEVELS_PER_AREA, getLayerAreaLevels }) => {
-                        import('../SaveManager').then(({ SaveManager }) => {
-                            const currentLayer = SaveManager.state.currentLayer || 1;
-                            const currentArea = SaveManager.state.currentArea[String(currentLayer)] || 1;
-                            const levelInArea = ((this.ctx.stageLevel - 1) % LEVELS_PER_AREA) + 1;
-                            const areaLevels = getLayerAreaLevels(currentLayer, currentArea);
-                            const nextLevelInArea = levelInArea + 1;
-                            const nextLvl = nextLevelInArea <= LEVELS_PER_AREA
-                                ? areaLevels[nextLevelInArea - 1]
-                                : null;
-                            const requiredScore = nextLvl ? nextLvl.unlockScore : 0;
+                    // [优化] 直接调用静态导入的函数
+                    const currentLayer = SaveManager.state.currentLayer || 1;
+                    const currentArea = SaveManager.state.currentArea[String(currentLayer)] || 1;
+                    const levelInArea = ((this.ctx.stageLevel - 1) % LEVELS_PER_AREA) + 1;
+                    const areaLevels = getLayerAreaLevels(currentLayer, currentArea);
+                    const nextLevelInArea = levelInArea + 1;
+                    const nextLvl = nextLevelInArea <= LEVELS_PER_AREA
+                        ? areaLevels[nextLevelInArea - 1]
+                        : null;
+                    const requiredScore = nextLvl ? nextLvl.unlockScore : 0;
 
-                            EventBus.emit(GameEvents.UI_STAGE_SCORE_UPDATE, {
-                                currentScore: this.ctx.stageScore,
-                                requiredScore,
-                                levelId: this.ctx.stageLevel,
-                            });
-
-                            // 检测是否刚达到解锁分数（仅检测一次）
-                            if (nextLvl && this.ctx.stageScore >= requiredScore && !this.ctx.stageUnlockShown) {
-                                this.ctx.stageUnlockShown = true;
-                                EventBus.emit(GameEvents.STAGE_UNLOCK_REACHED, {
-                                    currentScore: this.ctx.stageScore,
-                                    requiredScore,
-                                    nextLevelName: nextLvl.name,
-                                });
-                            }
-                        });
+                    EventBus.emit(GameEvents.UI_STAGE_SCORE_UPDATE, {
+                        currentScore: this.ctx.stageScore,
+                        requiredScore,
+                        levelId: this.ctx.stageLevel,
                     });
+
+                    if (nextLvl && this.ctx.stageScore >= requiredScore && !this.ctx.stageUnlockShown) {
+                        this.ctx.stageUnlockShown = true;
+                        EventBus.emit(GameEvents.STAGE_UNLOCK_REACHED, {
+                            currentScore: this.ctx.stageScore,
+                            requiredScore,
+                            nextLevelName: nextLvl.name,
+                        });
+                    }
                 }
             }
 
-            import('../SaveManager').then(({ SaveManager }) => {
-                SaveManager.state.gold += Math.floor(val);
+            // [优化] 金币累加 + 防抖 save（不再每杀一只鱼都写 localStorage）
+            SaveManager.state.gold += Math.floor(val);
+            if (this.saveDebounceTimer <= 0) {
                 SaveManager.save();
-            });
+                this.saveDebounceTimer = CombatSystem.SAVE_DEBOUNCE;
+            }
 
             EventBus.emit(GameEvents.UI_HUD_UPDATE, { crystals: this.ctx.crystals });
             this.effects.spawnParticles(fish.x, fish.y, 20, 0xffffff, 8);

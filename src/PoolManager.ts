@@ -1,10 +1,12 @@
 /**
- * 高性能对象池管理器
- * 用于管理鱼、子弹、掉落物等海量实体的复用，避免产生 GC。
+ * [优化] PoolManager
+ * - 增加最大池容量限制，防止内存泄漏
+ * - 增加 stats() 方法方便调试
  */
 export class PoolManager {
     private static instance: PoolManager;
     private pools: Map<string, any[]> = new Map();
+    private static readonly MAX_POOL_SIZE = 200;
 
     private constructor() {}
 
@@ -15,11 +17,6 @@ export class PoolManager {
         return PoolManager.instance;
     }
 
-    /**
-     * 从池中获取一个实例
-     * @param type 类型标识符
-     * @param factory 如果池为空，用于创建新实例的工厂函数
-     */
     public get<T>(type: string, factory: () => T): T {
         const pool = this.pools.get(type);
         if (pool && pool.length > 0) {
@@ -29,9 +26,7 @@ export class PoolManager {
     }
 
     /**
-     * 将实例归还到池中
-     * @param type 类型标识符
-     * @param instance 要归还的实例
+     * [优化] 归还对象到池中，超过上限则丢弃
      */
     public put(type: string, instance: any): void {
         let pool = this.pools.get(type);
@@ -39,13 +34,22 @@ export class PoolManager {
             pool = [];
             this.pools.set(type, pool);
         }
-        pool.push(instance);
+        // [优化] 防止池无限增长
+        if (pool.length < PoolManager.MAX_POOL_SIZE) {
+            pool.push(instance);
+        }
     }
 
-    /**
-     * 清空特定类型的池
-     */
     public clear(type: string): void {
         this.pools.delete(type);
+    }
+
+    /** [优化] 调试用：打印各池大小 */
+    public stats(): Record<string, number> {
+        const result: Record<string, number> = {};
+        for (const [key, pool] of this.pools) {
+            result[key] = pool.length;
+        }
+        return result;
     }
 }
