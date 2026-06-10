@@ -169,6 +169,11 @@ export class SceneManager {
         return this.layers.get(name) || this.app.stage;
     }
 
+    public static isPortraitRotated: boolean = false;
+    private static _portraitScale: number = 0;
+    private static _portraitOffX: number = 0;
+    private static _portraitOffY: number = 0;
+
     public static applyResize(): void {
         if (!this.app?.renderer) return;
 
@@ -176,25 +181,124 @@ export class SceneManager {
         const sys = (globalThis as any).GameGlobal?.__wxSystemInfo;
         let vw = sys?.screenWidth ?? sys?.windowWidth ?? window.innerWidth;
         let vh = sys?.screenHeight ?? sys?.windowHeight ?? window.innerHeight;
-        // 横屏小游戏：部分机型 window 仍是竖屏宽高，交换后 UI 才不会被裁到屏外
-        if (vh > vw) {
-            const t = vw; vw = vh; vh = t;
-        }
+
         const designW = this.width;
         const designH = this.height;
 
-        this.app.renderer.resize(vw, vh);
+        // 判断是否需要在 PIXI 内部旋转（手机竖屏 + 非微信环境）
+        const isMobile = typeof navigator !== 'undefined'
+            && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+        const isPortrait = vh > vw && isMobile && typeof document !== 'undefined';
 
-        const scale = Math.min(vw / designW, vh / designH);
+        if (isPortrait) {
+            // ── 竖屏模式：渲染器用原始竖屏尺寸，舞台旋转 -90° 填满屏幕 ──
+            this.isPortraitRotated = true;
+            const screenW = vw;   // 手机短边（如 375）
+            const screenH = vh;   // 手机长边（如 812）
 
-        // game.json 已锁定横屏，不再做竖屏旋转（旋转是真机「半屏」主因）
-        this.app.stage.pivot.set(0, 0);
-        this.app.stage.rotation = 0;
-        this.app.stage.scale.set(scale);
-        this.app.stage.x = (vw - designW * scale) / 2;
-        this.app.stage.y = (vh - designH * scale) / 2;
+            this.app.renderer.resize(screenW, screenH);
+
+            // 缩放：让 1920 宽度适配屏幕高度 812
+            const scale = screenH / designW;
+            this._portraitScale = scale;
+
+            // 旋转 -90° 并定位：stage-right → screen-top, stage-bottom → screen-left
+            this.app.stage.pivot.set(0, 0);
+            this.app.stage.rotation = -Math.PI / 2;
+            this.app.stage.scale.set(scale);
+            // stage 旋转后 (0,0)→(0,0), (1920,0)→(0,-1920*s), (0,1080)→(1080*s,0)
+            // 需平移使 stage 底部(screen-left) 居中
+            const offX = (screenW - designH * scale) / 2;
+            const offY = designW * scale; // stage-right 映射到 screen-bottom
+            this._portraitOffX = offX;
+            this._portraitOffY = offY;
+            this.app.stage.x = offX;
+            this.app.stage.y = offY;
+
+            // 设置触摸坐标映射
+            this._setupPortraitTouchMapping(screenW, screenH, scale, offX, offY);
+        } else {
+            // ── 横屏 / 桌面模式：正常渲染 ──
+            this.isPortraitRotated = false;
+
+            // 横屏小游戏：部分机型 window 仍是竖屏宽高，交换后 UI 才不会被裁到屏外
+            if (vh > vw) {
+                const t = vw; vw = vh; vh = t;
+            }
+
+            this.app.renderer.resize(vw, vh);
+            const scale = Math.min(vw / designW, vh / designH);
+
+            this.app.stage.pivot.set(0, 0);
+            this.app.stage.rotation = 0;
+            this.app.stage.scale.set(scale);
+            this.app.stage.x = (vw - designW * scale) / 2;
+            this.app.stage.y = (vh - designH * scale) / 2;
+
+            // 移除触摸映射
+            this._removePortraitTouchMapping();
+        }
 
         this.layoutBackground();
+    }
+
+    // ── 竖屏触摸坐标映射 ──
+    // 舞台旋转 -90° 后，PIXI 默认坐标映射会错乱
+    // 拦截 pointermove 事件，将屏幕坐标转换为旋转后的舞台坐标
+    private static _touchMapHandler: ((e: PointerEvent) => void) | null = null;
+    private static _mappedCanvas: HTMLCanvasElement | null = null;
+
+    private static _setupPortraitTouchMapping(
+        screenW: number, screenH: number,
+        scale: number, offX: number, offY: number
+    ): void {
+        if (typeof document === 'undefined') return;
+        const canvas = document.querySelector('canvas') as HTMLCanvasElement | null;
+        if (!canvas) return;
+
+        // 先清理旧的
+        this._removePortraitTouchMapping();
+
+        const designW = this.width;  // 1920
+        const designH = this.height; // 1080
+
+        const handler = (e: PointerEvent) => {
+            // 舞台 rotation = -90°, scale = s, position = (offX, offY)
+            // 世界坐标公式：screenX = stageY * s + offX
+            //               screenY = offY - stageX * s
+            // 反解：
+            const stageX = (offY - e.clientY) / scale;
+            const stageY = (e.clientX - offX) / scale;
+
+            // 映射回 PIXI 认为的坐标系（竖屏 screenW×screenH，无旋转）
+            // 正常情况 PIXI 用：screenX = stageX * s + stage.x
+            //                    screenY = stageY * s + stage.y
+            // 这里 stage.x / stage.y 是竖屏居中偏移
+            const normalScale = Math.min(screenW / designW, screenH / designH);
+            const normalX = stageX * normalScale + (screenW - designW * normalScale) / 2;
+            const normalY = stageY * normalScale + (screenH - designH * normalScale) / 2;
+
+            Object.defineProperty(e, 'clientX', { value: normalX, configurable: true });
+            Object.defineProperty(e, 'clientY', { value: normalY, configurable: true });
+        };
+
+        // capture 阶段拦截，在 PIXI 处理之前修改坐标
+        canvas.addEventListener('pointermove', handler, true);
+        canvas.addEventListener('pointerdown', handler, true);
+        canvas.addEventListener('pointerup', handler, true);
+
+        this._touchMapHandler = handler;
+        this._mappedCanvas = canvas;
+    }
+
+    private static _removePortraitTouchMapping(): void {
+        if (this._mappedCanvas && this._touchMapHandler) {
+            this._mappedCanvas.removeEventListener('pointermove', this._touchMapHandler, true);
+            this._mappedCanvas.removeEventListener('pointerdown', this._touchMapHandler, true);
+            this._mappedCanvas.removeEventListener('pointerup', this._touchMapHandler, true);
+            this._touchMapHandler = null;
+            this._mappedCanvas = null;
+        }
     }
 
     /** 背景在设计稿坐标系内铺满 1920×1080 */
